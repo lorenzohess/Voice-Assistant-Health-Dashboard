@@ -150,3 +150,59 @@ class MealPreset(db.Model):
             "carbs_g": self.carbs_g,
             "fat_g": self.fat_g,
         }
+
+
+class CustomMetric(db.Model):
+    """User-defined custom metric definition."""
+    
+    __tablename__ = "custom_metrics"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    unit = db.Column(db.String(50), nullable=False)  # e.g., "servings", "glasses", "minutes"
+    chart_type = db.Column(db.String(20), default="bar")  # "bar" or "line"
+    color = db.Column(db.String(20), default="#6366f1")  # hex color
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship to entries
+    entries = db.relationship("CustomMetricEntry", backref="metric", lazy=True, cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<CustomMetric {self.name} ({self.unit})>"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "unit": self.unit,
+            "chart_type": self.chart_type,
+            "color": self.color,
+        }
+
+
+class CustomMetricEntry(db.Model):
+    """Entry for a user-defined custom metric."""
+    
+    __tablename__ = "custom_metric_entries"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    metric_id = db.Column(db.Integer, db.ForeignKey("custom_metrics.id"), nullable=False)
+    date = db.Column(db.Date, nullable=False, index=True)
+    value = db.Column(db.Float, nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Unique constraint: one entry per metric per date
+    __table_args__ = (db.UniqueConstraint('metric_id', 'date', name='uix_metric_date'),)
+    
+    def __repr__(self):
+        return f"<CustomMetricEntry {self.metric_id} {self.date}: {self.value}>"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "metric_id": self.metric_id,
+            "date": self.date.isoformat(),
+            "value": self.value,
+            "notes": self.notes,
+        }

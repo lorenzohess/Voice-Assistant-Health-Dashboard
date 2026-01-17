@@ -140,18 +140,22 @@
         </div>
         {% endif %}
         
-        {% if presets %}
         <div class="quick-presets">
-            <h4>Quick Add</h4>
-            <div class="preset-buttons">
-                {% for preset in presets[:6] %}
-                <button class="preset-btn" onclick="logPreset({{ preset.id }})" title="{{ preset.calories|int }} kcal">
-                    {{ preset.name }}
-                </button>
-                {% endfor %}
+            <h4>Quick Add Preset</h4>
+            <div class="preset-search-container">
+                <input type="text" id="presetSearchInput" class="preset-search-input" placeholder="Search presets..." autocomplete="off">
+                <div class="preset-dropdown" id="presetDropdown">
+                    {% for preset in presets %}
+                    <div class="preset-dropdown-item" data-id="{{ preset.id }}" data-name="{{ preset.name|lower }}" data-category="{{ (preset.category or '')|lower }}">
+                        <span class="preset-dropdown-name">{{ preset.name }}</span>
+                        <span class="preset-dropdown-cal">{{ preset.calories|int }} kcal</span>
+                    </div>
+                    {% else %}
+                    <div class="preset-dropdown-empty">No presets yet</div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
-        {% endif %}
     </div>
     
     <!-- Pool Schedule Card -->
@@ -202,6 +206,100 @@
             <span class="next-time">{{ pool_status.next_session.day_name }} {{ pool_status.next_session.session_str }}</span>
         </div>
         {% endif %}
+    </div>
+
+    <!-- Custom Metric Cards -->
+    {% for cm in custom_charts %}
+    <div class="card custom-metric-card" data-metric-id="{{ cm.id }}">
+        <div class="card-header">
+            <h2>{{ cm.name }}</h2>
+            <div class="card-actions">
+                <button class="btn btn-primary btn-sm" onclick="openAddCustomEntryModal({{ cm.id }}, '{{ cm.name }}', '{{ cm.unit }}')">+ Add</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteCustomMetric({{ cm.id }}, '{{ cm.name }}')">×</button>
+            </div>
+        </div>
+        <div class="chart" id="custom-chart-{{ cm.id }}"></div>
+        <div class="metrics-row">
+            <div class="metric">
+                <span class="metric-value">{{ "%.1f"|format(cm.metrics.latest) if cm.metrics.latest is not none else "—" }}</span>
+                <span class="metric-label">Latest ({{ cm.unit }})</span>
+            </div>
+            <div class="metric">
+                <span class="metric-value">{{ "%.1f"|format(cm.metrics.average) if cm.metrics.average is not none else "—" }}</span>
+                <span class="metric-label">Avg</span>
+            </div>
+            <div class="metric">
+                <span class="metric-value">{{ cm.metrics.count }}</span>
+                <span class="metric-label">Entries</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Add New Metric Card -->
+    <div class="card add-metric-card" onclick="openModal('addMetricModal')">
+        <div class="add-metric-content">
+            <div class="add-icon">+</div>
+            <span>Add New Graph</span>
+        </div>
+    </div>
+</div><!-- end dashboard-grid -->
+
+<!-- Add Custom Metric Modal -->
+<div class="modal" id="addMetricModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add New Graph</h3>
+            <button class="modal-close" onclick="closeModal('addMetricModal')">&times;</button>
+        </div>
+        <form id="addMetricForm" onsubmit="submitAddMetric(event)">
+            <div class="form-group">
+                <label for="metricName">Name</label>
+                <input type="text" id="metricName" name="name" placeholder="e.g., Vegetable Servings" required>
+            </div>
+            <div class="form-group">
+                <label for="metricUnit">Unit</label>
+                <input type="text" id="metricUnit" name="unit" placeholder="e.g., servings, glasses, minutes" value="units">
+            </div>
+            <div class="form-group">
+                <label for="metricChartType">Chart Type</label>
+                <select id="metricChartType" name="chart_type">
+                    <option value="bar">Bar Chart</option>
+                    <option value="line">Line Chart</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="metricColor">Color</label>
+                <input type="color" id="metricColor" name="color" value="#6366f1">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Create Graph</button>
+        </form>
+    </div>
+</div>
+
+<!-- Add Custom Entry Modal -->
+<div class="modal" id="addCustomEntryModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="addCustomEntryTitle">Add Entry</h3>
+            <button class="modal-close" onclick="closeModal('addCustomEntryModal')">&times;</button>
+        </div>
+        <form id="addCustomEntryForm" onsubmit="submitAddCustomEntry(event)">
+            <input type="hidden" id="customEntryMetricId" name="metric_id">
+            <div class="form-group">
+                <label for="customEntryDate">Date</label>
+                <input type="date" id="customEntryDate" name="date" value="{{ today }}" required>
+            </div>
+            <div class="form-group">
+                <label for="customEntryValue">Value (<span id="customEntryUnit">units</span>)</label>
+                <input type="number" id="customEntryValue" name="value" step="0.1" required>
+            </div>
+            <div class="form-group">
+                <label for="customEntryNotes">Notes (optional)</label>
+                <input type="text" id="customEntryNotes" name="notes" placeholder="Optional notes">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Add Entry</button>
+        </form>
     </div>
 </div>
 
@@ -394,9 +492,13 @@
             <button class="modal-close" onclick="closeModal('presetModal')">&times;</button>
         </div>
         
+        <div class="preset-modal-search">
+            <input type="text" id="presetModalSearchInput" placeholder="Search presets..." autocomplete="off">
+        </div>
+        
         <div class="preset-list" id="presetList">
             {% for preset in presets %}
-            <div class="preset-item" data-id="{{ preset.id }}">
+            <div class="preset-item" data-id="{{ preset.id }}" data-name="{{ preset.name|lower }}" data-category="{{ (preset.category or '')|lower }}">
                 <div class="preset-info">
                     <span class="preset-name">{{ preset.name }}</span>
                     <span class="preset-category">{{ preset.category or '' }}</span>
@@ -476,6 +578,14 @@
     Plotly.newPlot('wakeChart', wakeData.data, wakeData.layout, {responsive: true, displayModeBar: false});
     Plotly.newPlot('workoutChart', workoutData.data, workoutData.layout, {responsive: true, displayModeBar: false});
     Plotly.newPlot('calorieChart', calorieData.data, calorieData.layout, {responsive: true, displayModeBar: false});
+    
+    // Render custom metric charts
+    {% for cm in custom_charts %}
+    (function() {
+        const customData = {{ cm.chart_json | safe }};
+        Plotly.newPlot('custom-chart-{{ cm.id }}', customData.data, customData.layout, {responsive: true, displayModeBar: false});
+    })();
+    {% endfor %}
     
     // Modal functions
     function openModal(id) {
@@ -687,5 +797,183 @@
         e.preventDefault();
         submitForm('/api/presets', 'presetForm', 'presetModal');
     });
+    
+    // Preset Search Dropdown (Quick Add)
+    const presetSearchInput = document.getElementById('presetSearchInput');
+    const presetDropdown = document.getElementById('presetDropdown');
+    
+    if (presetSearchInput && presetDropdown) {
+        presetSearchInput.addEventListener('focus', function() {
+            presetDropdown.classList.add('show');
+            filterPresetDropdown('');
+        });
+        
+        presetSearchInput.addEventListener('input', function() {
+            filterPresetDropdown(this.value.toLowerCase());
+        });
+        
+        presetSearchInput.addEventListener('blur', function() {
+            // Delay to allow click on dropdown item
+            setTimeout(() => presetDropdown.classList.remove('show'), 200);
+        });
+        
+        // Handle keyboard navigation
+        presetSearchInput.addEventListener('keydown', function(e) {
+            const items = presetDropdown.querySelectorAll('.preset-dropdown-item:not(.hidden)');
+            const highlighted = presetDropdown.querySelector('.preset-dropdown-item.highlighted');
+            let index = Array.from(items).indexOf(highlighted);
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (index < items.length - 1) index++;
+                else index = 0;
+                items.forEach(i => i.classList.remove('highlighted'));
+                if (items[index]) items[index].classList.add('highlighted');
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (index > 0) index--;
+                else index = items.length - 1;
+                items.forEach(i => i.classList.remove('highlighted'));
+                if (items[index]) items[index].classList.add('highlighted');
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (highlighted) {
+                    logPreset(highlighted.dataset.id);
+                } else if (items.length === 1) {
+                    logPreset(items[0].dataset.id);
+                }
+            } else if (e.key === 'Escape') {
+                presetDropdown.classList.remove('show');
+                presetSearchInput.blur();
+            }
+        });
+        
+        // Click on dropdown item
+        presetDropdown.querySelectorAll('.preset-dropdown-item').forEach(item => {
+            item.addEventListener('click', function() {
+                logPreset(this.dataset.id);
+            });
+        });
+    }
+    
+    function filterPresetDropdown(query) {
+        const items = presetDropdown.querySelectorAll('.preset-dropdown-item');
+        items.forEach(item => {
+            const name = item.dataset.name || '';
+            const category = item.dataset.category || '';
+            if (query === '' || name.includes(query) || category.includes(query)) {
+                item.classList.remove('hidden');
+            } else {
+                item.classList.add('hidden');
+            }
+            item.classList.remove('highlighted');
+        });
+        // Highlight first visible item
+        const firstVisible = presetDropdown.querySelector('.preset-dropdown-item:not(.hidden)');
+        if (firstVisible) firstVisible.classList.add('highlighted');
+    }
+    
+    // Preset Modal Search
+    const presetModalSearch = document.getElementById('presetModalSearchInput');
+    const presetList = document.getElementById('presetList');
+    
+    if (presetModalSearch && presetList) {
+        presetModalSearch.addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            const items = presetList.querySelectorAll('.preset-item');
+            items.forEach(item => {
+                const name = item.dataset.name || '';
+                const category = item.dataset.category || '';
+                if (query === '' || name.includes(query) || category.includes(query)) {
+                    item.style.display = '';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    }
+    
+    // Custom Metric Functions
+    async function submitAddMetric(e) {
+        e.preventDefault();
+        const form = document.getElementById('addMetricForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        try {
+            const response = await fetch('/api/custom-metrics', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            if (result.status === 'ok') {
+                closeModal('addMetricModal');
+                window.location.reload();
+            } else {
+                alert('Error: ' + (result.message || 'Failed to create metric'));
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
+    
+    function openAddCustomEntryModal(metricId, metricName, metricUnit) {
+        document.getElementById('customEntryMetricId').value = metricId;
+        document.getElementById('addCustomEntryTitle').textContent = 'Add ' + metricName + ' Entry';
+        document.getElementById('customEntryUnit').textContent = metricUnit;
+        document.getElementById('customEntryDate').value = '{{ today }}';
+        document.getElementById('customEntryValue').value = '';
+        document.getElementById('customEntryNotes').value = '';
+        openModal('addCustomEntryModal');
+    }
+    
+    async function submitAddCustomEntry(e) {
+        e.preventDefault();
+        const form = document.getElementById('addCustomEntryForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        const metricId = data.metric_id;
+        
+        try {
+            const response = await fetch('/api/custom-metrics/' + metricId + '/entries', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            if (result.status === 'ok') {
+                closeModal('addCustomEntryModal');
+                window.location.reload();
+            } else {
+                alert('Error: ' + (result.message || 'Failed to add entry'));
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
+    
+    async function deleteCustomMetric(metricId, metricName) {
+        if (!confirm('Delete "' + metricName + '" and all its data? This cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/custom-metrics/' + metricId, {
+                method: 'DELETE'
+            });
+            
+            const result = await response.json();
+            if (result.status === 'ok') {
+                window.location.reload();
+            } else {
+                alert('Error: ' + (result.message || 'Failed to delete metric'));
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
 </script>
 {% endblock %}

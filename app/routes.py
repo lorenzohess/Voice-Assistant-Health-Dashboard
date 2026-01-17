@@ -11,7 +11,10 @@ import plotly.graph_objects as go
 import plotly.utils
 
 from app import db
-from app.models import WeightEntry, SleepEntry, WakeTimeEntry, WorkoutEntry, CalorieEntry, MealPreset
+from app.models import (
+    WeightEntry, SleepEntry, WakeTimeEntry, WorkoutEntry, CalorieEntry, 
+    MealPreset, CustomMetric, CustomMetricEntry
+)
 from app.pool_schedule import get_pool_status, get_weekly_schedule
 from app.food_db import search_foods, get_food_by_id, add_custom_food, get_food_count, init_food_db
 from app.validation import (
@@ -219,6 +222,37 @@ def dashboard():
     pool_status = get_pool_status()
     pool_weekly = get_weekly_schedule()
     
+    # Custom metrics
+    custom_metrics = CustomMetric.query.order_by(CustomMetric.name).all()
+    custom_charts = []
+    
+    for metric in custom_metrics:
+        entries = CustomMetricEntry.query.filter(
+            CustomMetricEntry.metric_id == metric.id,
+            CustomMetricEntry.date >= start_date,
+            CustomMetricEntry.date <= end_date
+        ).order_by(CustomMetricEntry.date).all()
+        
+        dates = [e.date.isoformat() for e in entries]
+        values = [e.value for e in entries]
+        
+        if metric.chart_type == "line":
+            chart_json = create_line_chart(dates, values, metric.name, metric.unit, metric.color)
+        else:
+            chart_json = create_bar_chart(dates, values, metric.name, metric.unit, metric.color)
+        
+        metrics_data = calculate_metrics(values)
+        
+        custom_charts.append({
+            "id": metric.id,
+            "name": metric.name,
+            "unit": metric.unit,
+            "chart_type": metric.chart_type,
+            "color": metric.color,
+            "chart_json": chart_json,
+            "metrics": metrics_data,
+        })
+    
     return render_template(
         "dashboard.html",
         window=window,
@@ -238,6 +272,7 @@ def dashboard():
         food_count=food_count,
         pool_status=pool_status,
         pool_weekly=pool_weekly,
+        custom_charts=custom_charts,
         today=date.today().isoformat(),
     )
 
@@ -526,6 +561,112 @@ def log_preset(preset_id):
     db.session.commit()
     
     return jsonify({"status": "ok", "id": entry.id})
+
+
+# --- Custom Metrics API ---
+
+@main_bp.route("/api/custom-metrics", methods=["GET"])
+def get_custom_metrics():
+    """Get all custom metrics."""
+    metrics = CustomMetric.query.order_by(CustomMetric.name).all()
+    return jsonify({"metrics": [m.to_dict() for m in metrics]})
+
+
+@main_bp.route("/api/custom-metrics", methods=["POST"])
+def create_custom_metric():
+    """Create a new custom metric (graph)."""
+    data = request.get_json()
+    
+    # Check if metric with this name already exists
+    existing = CustomMetric.query.filter_by(name=data["name"]).first()
+    if existing:
+        return jsonify({"status": "error", "message": "Metric with this name already exists"}), 400
+    
+    metric = CustomMetric(
+        name=data["name"],
+        unit=data.get("unit", "units"),
+        chart_type=data.get("chart_type", "bar"),
+        color=data.get("color", "#6366f1"),
+    )
+    db.session.add(metric)
+    db.session.commit()
+    
+    return jsonify({"status": "ok", "id": metric.id, "metric": metric.to_dict()})
+
+
+@main_bp.route("/api/custom-metrics/<int:metric_id>", methods=["PUT"])
+def update_custom_metric(metric_id):
+    """Update a custom metric."""
+    metric = CustomMetric.query.get_or_404(metric_id)
+    data = request.get_json()
+    
+    metric.name = data.get("name", metric.name)
+    metric.unit = data.get("unit", metric.unit)
+    metric.chart_type = data.get("chart_type", metric.chart_type)
+    metric.color = data.get("color", metric.color)
+    
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+
+@main_bp.route("/api/custom-metrics/<int:metric_id>", methods=["DELETE"])
+def delete_custom_metric(metric_id):
+    """Delete a custom metric and all its entries."""
+    metric = CustomMetric.query.get_or_404(metric_id)
+    db.session.delete(metric)
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+
+@main_bp.route("/api/custom-metrics/<int:metric_id>/entries", methods=["GET"])
+def get_metric_entries(metric_id):
+    """Get all entries for a custom metric."""
+    metric = CustomMetric.query.get_or_404(metric_id)
+    entries = CustomMetricEntry.query.filter_by(metric_id=metric_id).order_by(CustomMetricEntry.date).all()
+    return jsonify({
+        "metric": metric.to_dict(),
+        "entries": [e.to_dict() for e in entries]
+    })
+
+
+@main_bp.route("/api/custom-metrics/<int:metric_id>/entries", methods=["POST"])
+def add_metric_entry(metric_id):
+    """Add or update an entry for a custom metric."""
+    metric = CustomMetric.query.get_or_404(metric_id)
+    data = request.get_json()
+    
+    entry_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+    value = float(data["value"])
+    
+    # Check for existing entry on this date
+    existing = CustomMetricEntry.query.filter_by(
+        metric_id=metric_id,
+        date=entry_date
+    ).first()
+    
+    if existing:
+        existing.value = value
+        existing.notes = data.get("notes", existing.notes)
+    else:
+        entry = CustomMetricEntry(
+            metric_id=metric_id,
+            date=entry_date,
+            value=value,
+            notes=data.get("notes"),
+        )
+        db.session.add(entry)
+    
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+
+@main_bp.route("/api/custom-metrics/<int:metric_id>/entries/<int:entry_id>", methods=["DELETE"])
+def delete_metric_entry(metric_id, entry_id):
+    """Delete a custom metric entry."""
+    entry = CustomMetricEntry.query.filter_by(id=entry_id, metric_id=metric_id).first_or_404()
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({"status": "ok"})
 
 
 # --- CSV Export ---
