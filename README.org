@@ -1,0 +1,36 @@
+* Health Dashboard
+** User Needs
+1. Visualize graphs of health data
+   - Weight
+   - Calorie intake
+     - Ideally voice to text to AI to calorie API (AI doesn't guess calories)
+   - Hours of sleep
+   - Waking time
+   - Workouts
+2. Add new graphs for new data
+3. Programmatic graph titles: <user input data name>
+4. Adding new data and new graphs
+   - Ideally using voice to text to trigger the action
+   - Manually with input boxes is fine
+5. Different types of graphs
+   - Bar graph per day
+   - Dot graph per day
+6. User can change graph time window
+   - Defaults to 1 month
+7. Runs on Raspberry Pi Debian with micro HDMI -> HDMI monitor
+8. Implemented in Python
+9. Health data exportable as CSV
+10. Pi must go to sleep to have monitor turn off
+    - Ideally using voice to trigger the sleep
+    - On-screen button or user keyboard input can trigger it too
+11. Pi auto wakes up at 7AM to turn monitor on again
+12. User can apply metrics to each graph which are displayed in a box next to the graph
+    - Most recent data value
+    - Average data value
+    - Median data value
+    - Average data value per week
+    - If you think of other metrics let me know
+    - User can select which metrics are applied to each graph
+13. Plays music from a playlist (folder) at a certain time
+    - Essentially functions as an alarm
+    - Assume the Pi is always connected to a speaker

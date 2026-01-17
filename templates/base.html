@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Health Dashboard{% endblock %}</title>
+    
+    <!-- Plotly for charts -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    
+    <!-- Inter font for a clean look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">Health Dashboard</div>
+        <div class="nav-links">
+            <a href="{{ url_for('main.dashboard') }}" class="nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}">Dashboard</a>
+            <div class="nav-export">
+                <button class="btn btn-secondary" id="exportBtn">Export CSV</button>
+                <div class="export-dropdown" id="exportDropdown">
+                    <a href="{{ url_for('main.export_weight') }}">Weight</a>
+                    <a href="{{ url_for('main.export_sleep') }}">Sleep</a>
+                    <a href="{{ url_for('main.export_wake') }}">Wake Time</a>
+                    <a href="{{ url_for('main.export_workout') }}">Workouts</a>
+                    <hr>
+                    <a href="{{ url_for('main.export_all') }}">All Data</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <script>
+        // Export dropdown toggle
+        document.getElementById('exportBtn').addEventListener('click', function(e) {
+            e.stopPropagation();
+            document.getElementById('exportDropdown').classList.toggle('show');
+        });
+        
+        document.addEventListener('click', function() {
+            document.getElementById('exportDropdown').classList.remove('show');
+        });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

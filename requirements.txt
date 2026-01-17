@@ -1,0 +1,25 @@
+# Health Dashboard - Python Dependencies
+# Compatible with Python 3.9+ on both Arch Linux and Raspberry Pi OS
+
+# Web framework
+Flask>=3.0.0
+Werkzeug>=3.0.1
+
+# Database ORM
+Flask-SQLAlchemy>=3.1.1
+SQLAlchemy>=2.0.36
+
+# Charts (Plotly for interactive graphs)
+plotly==5.18.0
+
+# Scheduling (for alarms and timed events)
+APScheduler==3.10.4
+
+# Fuzzy matching (for food search in Phase 2)
+rapidfuzz==3.5.2
+
+# Date/time utilities
+python-dateutil==2.8.2
+
+# For CSV export
+# (csv is built-in, no extra package needed)

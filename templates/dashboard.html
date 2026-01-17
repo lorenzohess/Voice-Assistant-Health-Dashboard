@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1>Health Overview</h1>
+    
+    <div class="time-window-selector">
+        <a href="?window=1w" class="time-btn {% if window == '1w' %}active{% endif %}">1W</a>
+        <a href="?window=1m" class="time-btn {% if window == '1m' %}active{% endif %}">1M</a>
+        <a href="?window=3m" class="time-btn {% if window == '3m' %}active{% endif %}">3M</a>
+        <a href="?window=6m" class="time-btn {% if window == '6m' %}active{% endif %}">6M</a>
+        <a href="?window=1y" class="time-btn {% if window == '1y' %}active{% endif %}">1Y</a>
+    </div>
+</div>
+
+<div class="dashboard-grid">
+    <!-- Weight Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Weight</h2>
+            <button class="btn btn-primary btn-sm" onclick="openModal('weightModal')">+ Add</button>
+        </div>
+        <div class="chart-container" id="weightChart"></div>
+        <div class="metrics-box">
+            <div class="metric">
+                <span class="metric-label">Latest</span>
+                <span class="metric-value">{{ weight_metrics.latest or 'N/A' }}{% if weight_metrics.latest %} kg{% endif %}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Average</span>
+                <span class="metric-value">{{ weight_metrics.average or 'N/A' }}{% if weight_metrics.average %} kg{% endif %}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Median</span>
+                <span class="metric-value">{{ weight_metrics.median or 'N/A' }}{% if weight_metrics.median %} kg{% endif %}</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sleep Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Sleep</h2>
+            <button class="btn btn-primary btn-sm" onclick="openModal('sleepModal')">+ Add</button>
+        </div>
+        <div class="chart-container" id="sleepChart"></div>
+        <div class="metrics-box">
+            <div class="metric">
+                <span class="metric-label">Latest</span>
+                <span class="metric-value">{{ sleep_metrics.latest or 'N/A' }}{% if sleep_metrics.latest %} hrs{% endif %}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Average</span>
+                <span class="metric-value">{{ sleep_metrics.average or 'N/A' }}{% if sleep_metrics.average %} hrs{% endif %}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Median</span>
+                <span class="metric-value">{{ sleep_metrics.median or 'N/A' }}{% if sleep_metrics.median %} hrs{% endif %}</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Wake Time Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Wake Time</h2>
+            <button class="btn btn-primary btn-sm" onclick="openModal('wakeModal')">+ Add</button>
+        </div>
+        <div class="chart-container" id="wakeChart"></div>
+        <div class="metrics-box">
+            <div class="metric">
+                <span class="metric-label">Latest</span>
+                <span class="metric-value">{{ wake_metrics.latest_formatted }}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Entries</span>
+                <span class="metric-value">{{ wake_metrics.count }}</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Workout Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Workouts</h2>
+            <button class="btn btn-primary btn-sm" onclick="openModal('workoutModal')">+ Add</button>
+        </div>
+        <div class="chart-container" id="workoutChart"></div>
+        <div class="metrics-box">
+            <div class="metric">
+                <span class="metric-label">Total</span>
+                <span class="metric-value">{{ workout_metrics.total }}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Days Active</span>
+                <span class="metric-value">{{ workout_metrics.days_with_workout }}</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Pool Schedule Card -->
+    <div class="card pool-card">
+        <div class="card-header">
+            <h2>Pool Schedule</h2>
+            <button class="btn btn-secondary btn-sm" onclick="openModal('poolScheduleModal')">Full Schedule</button>
+        </div>
+        
+        <div class="pool-status">
+            {% if pool_status.is_open %}
+            <div class="pool-status-badge open">
+                <span class="status-dot"></span>
+                OPEN NOW
+            </div>
+            <p class="pool-closes">Closes at {{ pool_status.closes_at }}</p>
+            {% elif pool_status.is_closed_today %}
+            <div class="pool-status-badge closed">
+                <span class="status-dot"></span>
+                CLOSED TODAY
+            </div>
+            {% else %}
+            <div class="pool-status-badge closed">
+                <span class="status-dot"></span>
+                CLOSED
+            </div>
+            {% endif %}
+            
+            {% if pool_status.exception_msg %}
+            <p class="pool-exception">{{ pool_status.exception_msg }}</p>
+            {% endif %}
+        </div>
+        
+        {% if pool_status.sessions_today %}
+        <div class="pool-today">
+            <h4>{{ pool_status.day_name }}'s Sessions</h4>
+            <div class="pool-sessions">
+                {% for session in pool_status.sessions_today %}
+                <span class="pool-session {{ session.status }}">{{ session.time }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if pool_status.next_session and not pool_status.is_open %}
+        <div class="pool-next">
+            <span class="next-label">Next session:</span>
+            <span class="next-time">{{ pool_status.next_session.day_name }} {{ pool_status.next_session.session_str }}</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Pool Schedule Modal -->
+<div class="modal" id="poolScheduleModal">
+    <div class="modal-content modal-wide">
+        <div class="modal-header">
+            <h3>Weekly Pool Schedule</h3>
+            <button class="modal-close" onclick="closeModal('poolScheduleModal')">&times;</button>
+        </div>
+        <table class="pool-schedule-table">
+            <thead>
+                <tr>
+                    <th>Day</th>
+                    <th>Sessions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for day in pool_weekly %}
+                <tr>
+                    <td>{{ day.day }}</td>
+                    <td>{{ day.sessions }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Weight Modal -->
+<div class="modal" id="weightModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Weight</h3>
+            <button class="modal-close" onclick="closeModal('weightModal')">&times;</button>
+        </div>
+        <form id="weightForm">
+            <div class="form-group">
+                <label for="weightDate">Date</label>
+                <input type="date" id="weightDate" name="date" value="{{ today }}" required>
+            </div>
+            <div class="form-group">
+                <label for="weightValue">Weight (kg)</label>
+                <input type="number" id="weightValue" name="weight_kg" step="0.1" min="20" max="200" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</div>
+
+<!-- Sleep Modal -->
+<div class="modal" id="sleepModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Sleep</h3>
+            <button class="modal-close" onclick="closeModal('sleepModal')">&times;</button>
+        </div>
+        <form id="sleepForm">
+            <div class="form-group">
+                <label for="sleepDate">Date</label>
+                <input type="date" id="sleepDate" name="date" value="{{ today }}" required>
+            </div>
+            <div class="form-group">
+                <label for="sleepHours">Hours Slept</label>
+                <input type="number" id="sleepHours" name="hours" step="0.5" min="0" max="24" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</div>
+
+<!-- Wake Time Modal -->
+<div class="modal" id="wakeModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Wake Time</h3>
+            <button class="modal-close" onclick="closeModal('wakeModal')">&times;</button>
+        </div>
+        <form id="wakeForm">
+            <div class="form-group">
+                <label for="wakeDate">Date</label>
+                <input type="date" id="wakeDate" name="date" value="{{ today }}" required>
+            </div>
+            <div class="form-group">
+                <label for="wakeTime">Wake Time</label>
+                <input type="time" id="wakeTime" name="wake_time" step="1" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</div>
+
+<!-- Workout Modal -->
+<div class="modal" id="workoutModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Workout</h3>
+            <button class="modal-close" onclick="closeModal('workoutModal')">&times;</button>
+        </div>
+        <form id="workoutForm">
+            <div class="form-group">
+                <label for="workoutDate">Date</label>
+                <input type="date" id="workoutDate" name="date" value="{{ today }}" required>
+            </div>
+            <div class="form-group">
+                <label for="workoutType">Workout Type</label>
+                <input type="text" id="workoutType" name="workout_type" placeholder="e.g., Running, Weights, Yoga" required>
+            </div>
+            <div class="form-group">
+                <label for="workoutDuration">Duration (minutes, optional)</label>
+                <input type="number" id="workoutDuration" name="duration_minutes" min="1" max="600">
+            </div>
+            <div class="form-group">
+                <label for="workoutNotes">Notes (optional)</label>
+                <textarea id="workoutNotes" name="notes" rows="2"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Render charts
+    const weightData = {{ weight_chart | safe }};
+    const sleepData = {{ sleep_chart | safe }};
+    const wakeData = {{ wake_chart | safe }};
+    const workoutData = {{ workout_chart | safe }};
+    
+    Plotly.newPlot('weightChart', weightData.data, weightData.layout, {responsive: true, displayModeBar: false});
+    Plotly.newPlot('sleepChart', sleepData.data, sleepData.layout, {responsive: true, displayModeBar: false});
+    Plotly.newPlot('wakeChart', wakeData.data, wakeData.layout, {responsive: true, displayModeBar: false});
+    Plotly.newPlot('workoutChart', workoutData.data, workoutData.layout, {responsive: true, displayModeBar: false});
+    
+    // Modal functions
+    function openModal(id) {
+        document.getElementById(id).classList.add('show');
+    }
+    
+    function closeModal(id) {
+        document.getElementById(id).classList.remove('show');
+    }
+    
+    // Close modal on outside click
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.classList.remove('show');
+            }
+        });
+    });
+    
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal.show').forEach(m => m.classList.remove('show'));
+        }
+    });
+    
+    // Form submissions
+    async function submitForm(url, formId, modalId) {
+        const form = document.getElementById(formId);
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        // Convert time input to HH:MM:SS format if present
+        if (data.wake_time && data.wake_time.length === 5) {
+            data.wake_time = data.wake_time + ':00';
+        }
+        
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                closeModal(modalId);
+                location.reload();
+            } else {
+                alert('Error saving data');
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+    }
+    
+    document.getElementById('weightForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitForm('/api/weight', 'weightForm', 'weightModal');
+    });
+    
+    document.getElementById('sleepForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitForm('/api/sleep', 'sleepForm', 'sleepModal');
+    });
+    
+    document.getElementById('wakeForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitForm('/api/wake', 'wakeForm', 'wakeModal');
+    });
+    
+    document.getElementById('workoutForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitForm('/api/workout', 'workoutForm', 'workoutModal');
+    });
+</script>
+{% endblock %}
