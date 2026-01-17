@@ -93,7 +93,7 @@ class WorkoutEntry(db.Model):
 
 
 class CalorieEntry(db.Model):
-    """Calorie intake entry (for Phase 2, but schema ready now)."""
+    """Calorie intake entry."""
     
     __tablename__ = "calorie_entries"
     
@@ -104,6 +104,7 @@ class CalorieEntry(db.Model):
     protein_g = db.Column(db.Float, nullable=True)
     carbs_g = db.Column(db.Float, nullable=True)
     fat_g = db.Column(db.Float, nullable=True)
+    meal_type = db.Column(db.String(50), nullable=True)  # breakfast, lunch, dinner, snack
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
@@ -114,6 +115,36 @@ class CalorieEntry(db.Model):
             "id": self.id,
             "date": self.date.isoformat(),
             "meal_name": self.meal_name,
+            "calories": self.calories,
+            "protein_g": self.protein_g,
+            "carbs_g": self.carbs_g,
+            "fat_g": self.fat_g,
+            "meal_type": self.meal_type,
+        }
+
+
+class MealPreset(db.Model):
+    """Quick-add meal preset for frequently eaten meals."""
+    
+    __tablename__ = "meal_presets"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False, unique=True)
+    category = db.Column(db.String(50), nullable=True)  # breakfast, lunch, dinner, snack
+    calories = db.Column(db.Float, nullable=False)
+    protein_g = db.Column(db.Float, nullable=True)
+    carbs_g = db.Column(db.Float, nullable=True)
+    fat_g = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<MealPreset {self.name}: {self.calories} cal>"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "category": self.category,
             "calories": self.calories,
             "protein_g": self.protein_g,
             "carbs_g": self.carbs_g,

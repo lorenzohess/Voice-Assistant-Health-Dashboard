@@ -98,6 +98,62 @@
         </div>
     </div>
     
+    <!-- Calories Card -->
+    <div class="card calories-card">
+        <div class="card-header">
+            <h2>Calories</h2>
+            <div class="card-header-actions">
+                <button class="btn btn-secondary btn-sm" onclick="openModal('presetModal')">Presets</button>
+                <button class="btn btn-primary btn-sm" onclick="openModal('calorieModal')">+ Add</button>
+            </div>
+        </div>
+        <div class="chart-container" id="calorieChart"></div>
+        <div class="metrics-box">
+            <div class="metric">
+                <span class="metric-label">Today</span>
+                <span class="metric-value {% if today_calories > 2500 %}warning{% endif %}">{{ today_calories|int }} kcal</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Average</span>
+                <span class="metric-value">{{ calorie_metrics.average or 'N/A' }}{% if calorie_metrics.average %} kcal{% endif %}</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Foods DB</span>
+                <span class="metric-value">{{ food_count }}</span>
+            </div>
+        </div>
+        
+        {% if today_entries %}
+        <div class="today-meals">
+            <h4>Today's Meals</h4>
+            <div class="meal-list">
+                {% for entry in today_entries %}
+                <div class="meal-item" data-id="{{ entry.id }}">
+                    <div class="meal-info">
+                        <span class="meal-name">{{ entry.meal_name }}</span>
+                        <span class="meal-cals">{{ entry.calories|int }} kcal</span>
+                    </div>
+                    <button class="btn-icon delete-meal" onclick="deleteCalorieEntry({{ entry.id }})" title="Delete">×</button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if presets %}
+        <div class="quick-presets">
+            <h4>Quick Add</h4>
+            <div class="preset-buttons">
+                {% for preset in presets[:6] %}
+                <button class="preset-btn" onclick="logPreset({{ preset.id }})" title="{{ preset.calories|int }} kcal">
+                    {{ preset.name }}
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
     <!-- Pool Schedule Card -->
     <div class="card pool-card">
         <div class="card-header">
@@ -267,6 +323,143 @@
     </div>
 </div>
 
+<!-- Calorie Entry Modal -->
+<div class="modal" id="calorieModal">
+    <div class="modal-content modal-wide">
+        <div class="modal-header">
+            <h3>Add Food</h3>
+            <button class="modal-close" onclick="closeModal('calorieModal')">&times;</button>
+        </div>
+        
+        <!-- Food Search -->
+        <div class="form-group">
+            <label for="foodSearch">Search Foods</label>
+            <input type="text" id="foodSearch" placeholder="Type to search foods..." autocomplete="off">
+            <div id="foodSearchResults" class="search-results"></div>
+        </div>
+        
+        <form id="calorieForm">
+            <input type="hidden" id="calorieDate" name="date" value="{{ today }}">
+            
+            <div class="form-group">
+                <label for="calorieMealName">Food / Meal Name</label>
+                <input type="text" id="calorieMealName" name="meal_name" required>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="calorieAmount">Calories</label>
+                    <input type="number" id="calorieAmount" name="calories" min="0" max="5000" required>
+                </div>
+                <div class="form-group">
+                    <label for="calorieMealType">Meal Type</label>
+                    <select id="calorieMealType" name="meal_type">
+                        <option value="">--</option>
+                        <option value="breakfast">Breakfast</option>
+                        <option value="lunch">Lunch</option>
+                        <option value="dinner">Dinner</option>
+                        <option value="snack">Snack</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-row macros-row">
+                <div class="form-group">
+                    <label for="calorieProtein">Protein (g)</label>
+                    <input type="number" id="calorieProtein" name="protein" step="0.1" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="calorieCarbs">Carbs (g)</label>
+                    <input type="number" id="calorieCarbs" name="carbs" step="0.1" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="calorieFat">Fat (g)</label>
+                    <input type="number" id="calorieFat" name="fat" step="0.1" min="0">
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="saveAsPreset()">Save as Preset</button>
+                <button type="submit" class="btn btn-primary">Log Food</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Preset Management Modal -->
+<div class="modal" id="presetModal">
+    <div class="modal-content modal-wide">
+        <div class="modal-header">
+            <h3>Meal Presets</h3>
+            <button class="modal-close" onclick="closeModal('presetModal')">&times;</button>
+        </div>
+        
+        <div class="preset-list" id="presetList">
+            {% for preset in presets %}
+            <div class="preset-item" data-id="{{ preset.id }}">
+                <div class="preset-info">
+                    <span class="preset-name">{{ preset.name }}</span>
+                    <span class="preset-category">{{ preset.category or '' }}</span>
+                </div>
+                <div class="preset-macros">
+                    <span>{{ preset.calories|int }} kcal</span>
+                    {% if preset.protein_g %}<span>P: {{ preset.protein_g|int }}g</span>{% endif %}
+                    {% if preset.carbs_g %}<span>C: {{ preset.carbs_g|int }}g</span>{% endif %}
+                    {% if preset.fat_g %}<span>F: {{ preset.fat_g|int }}g</span>{% endif %}
+                </div>
+                <div class="preset-actions">
+                    <button class="btn btn-primary btn-sm" onclick="logPreset({{ preset.id }})">Log</button>
+                    <button class="btn-icon" onclick="deletePreset({{ preset.id }})" title="Delete">×</button>
+                </div>
+            </div>
+            {% else %}
+            <p class="empty-state">No presets yet. Add food and click "Save as Preset".</p>
+            {% endfor %}
+        </div>
+        
+        <hr>
+        
+        <h4>Add New Preset</h4>
+        <form id="presetForm">
+            <div class="form-group">
+                <label for="presetName">Name</label>
+                <input type="text" id="presetName" name="name" required placeholder="e.g., Morning Coffee">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="presetCalories">Calories</label>
+                    <input type="number" id="presetCalories" name="calories" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="presetCategory">Category</label>
+                    <select id="presetCategory" name="category">
+                        <option value="">--</option>
+                        <option value="breakfast">Breakfast</option>
+                        <option value="lunch">Lunch</option>
+                        <option value="dinner">Dinner</option>
+                        <option value="snack">Snack</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row macros-row">
+                <div class="form-group">
+                    <label for="presetProtein">Protein (g)</label>
+                    <input type="number" id="presetProtein" name="protein" step="0.1" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="presetCarbs">Carbs (g)</label>
+                    <input type="number" id="presetCarbs" name="carbs" step="0.1" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="presetFat">Fat (g)</label>
+                    <input type="number" id="presetFat" name="fat" step="0.1" min="0">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Create Preset</button>
+        </form>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -276,11 +469,13 @@
     const sleepData = {{ sleep_chart | safe }};
     const wakeData = {{ wake_chart | safe }};
     const workoutData = {{ workout_chart | safe }};
+    const calorieData = {{ calorie_chart | safe }};
     
     Plotly.newPlot('weightChart', weightData.data, weightData.layout, {responsive: true, displayModeBar: false});
     Plotly.newPlot('sleepChart', sleepData.data, sleepData.layout, {responsive: true, displayModeBar: false});
     Plotly.newPlot('wakeChart', wakeData.data, wakeData.layout, {responsive: true, displayModeBar: false});
     Plotly.newPlot('workoutChart', workoutData.data, workoutData.layout, {responsive: true, displayModeBar: false});
+    Plotly.newPlot('calorieChart', calorieData.data, calorieData.layout, {responsive: true, displayModeBar: false});
     
     // Modal functions
     function openModal(id) {
@@ -325,17 +520,144 @@
                 body: JSON.stringify(data)
             });
             
+            const result = await response.json();
+            
             if (response.ok) {
+                // Show warnings if any
+                if (result.warnings && result.warnings.length > 0) {
+                    alert('Saved with warnings:\n' + result.warnings.join('\n'));
+                }
                 closeModal(modalId);
                 location.reload();
             } else {
-                alert('Error saving data');
+                alert(result.message || 'Error saving data');
             }
         } catch (err) {
             alert('Error: ' + err.message);
         }
     }
     
+    // Food search functionality
+    let searchTimeout;
+    const foodSearchInput = document.getElementById('foodSearch');
+    const searchResults = document.getElementById('foodSearchResults');
+    
+    if (foodSearchInput) {
+        foodSearchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            const query = this.value.trim();
+            
+            if (query.length < 2) {
+                searchResults.innerHTML = '';
+                searchResults.style.display = 'none';
+                return;
+            }
+            
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch(`/api/foods/search?q=${encodeURIComponent(query)}`);
+                    const data = await response.json();
+                    
+                    if (data.foods.length === 0) {
+                        searchResults.innerHTML = '<div class="search-empty">No foods found</div>';
+                    } else {
+                        searchResults.innerHTML = data.foods.map(food => `
+                            <div class="search-item" onclick="selectFood(${JSON.stringify(food).replace(/"/g, '&quot;')})">
+                                <span class="food-name">${food.name}</span>
+                                <span class="food-cals">${Math.round(food.calories)} kcal</span>
+                            </div>
+                        `).join('');
+                    }
+                    searchResults.style.display = 'block';
+                } catch (err) {
+                    console.error('Search error:', err);
+                }
+            }, 300);
+        });
+        
+        // Hide search results when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!foodSearchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                searchResults.style.display = 'none';
+            }
+        });
+    }
+    
+    function selectFood(food) {
+        document.getElementById('calorieMealName').value = food.name;
+        document.getElementById('calorieAmount').value = Math.round(food.calories);
+        if (food.protein) document.getElementById('calorieProtein').value = food.protein;
+        if (food.carbs) document.getElementById('calorieCarbs').value = food.carbs;
+        if (food.fat) document.getElementById('calorieFat').value = food.fat;
+        
+        document.getElementById('foodSearch').value = '';
+        document.getElementById('foodSearchResults').style.display = 'none';
+    }
+    
+    // Calorie entry functions
+    async function deleteCalorieEntry(id) {
+        if (!confirm('Delete this entry?')) return;
+        
+        try {
+            const response = await fetch(`/api/calories/${id}`, {method: 'DELETE'});
+            if (response.ok) {
+                location.reload();
+            }
+        } catch (err) {
+            alert('Error deleting entry');
+        }
+    }
+    
+    // Preset functions
+    async function logPreset(presetId) {
+        try {
+            const response = await fetch(`/api/presets/${presetId}/log`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({date: '{{ today }}'})
+            });
+            if (response.ok) {
+                location.reload();
+            }
+        } catch (err) {
+            alert('Error logging preset');
+        }
+    }
+    
+    async function deletePreset(id) {
+        if (!confirm('Delete this preset?')) return;
+        
+        try {
+            const response = await fetch(`/api/presets/${id}`, {method: 'DELETE'});
+            if (response.ok) {
+                location.reload();
+            }
+        } catch (err) {
+            alert('Error deleting preset');
+        }
+    }
+    
+    function saveAsPreset() {
+        const name = document.getElementById('calorieMealName').value;
+        const calories = document.getElementById('calorieAmount').value;
+        
+        if (!name || !calories) {
+            alert('Please fill in at least the name and calories');
+            return;
+        }
+        
+        document.getElementById('presetName').value = name;
+        document.getElementById('presetCalories').value = calories;
+        document.getElementById('presetProtein').value = document.getElementById('calorieProtein').value || '';
+        document.getElementById('presetCarbs').value = document.getElementById('calorieCarbs').value || '';
+        document.getElementById('presetFat').value = document.getElementById('calorieFat').value || '';
+        document.getElementById('presetCategory').value = document.getElementById('calorieMealType').value || '';
+        
+        closeModal('calorieModal');
+        openModal('presetModal');
+    }
+    
+    // Form event listeners
     document.getElementById('weightForm').addEventListener('submit', function(e) {
         e.preventDefault();
         submitForm('/api/weight', 'weightForm', 'weightModal');
@@ -354,6 +676,16 @@
     document.getElementById('workoutForm').addEventListener('submit', function(e) {
         e.preventDefault();
         submitForm('/api/workout', 'workoutForm', 'workoutModal');
+    });
+    
+    document.getElementById('calorieForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitForm('/api/calories', 'calorieForm', 'calorieModal');
+    });
+    
+    document.getElementById('presetForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitForm('/api/presets', 'presetForm', 'presetModal');
     });
 </script>
 {% endblock %}

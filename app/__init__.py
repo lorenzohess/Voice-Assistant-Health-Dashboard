@@ -40,5 +40,9 @@ def create_app(config=None):
     # Create database tables
     with app.app_context():
         db.create_all()
+    
+    # Initialize food database
+    from app.food_db import init_food_db
+    init_food_db()
 
     return app

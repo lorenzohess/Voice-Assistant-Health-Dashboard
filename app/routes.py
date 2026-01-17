@@ -11,8 +11,13 @@ import plotly.graph_objects as go
 import plotly.utils
 
 from app import db
-from app.models import WeightEntry, SleepEntry, WakeTimeEntry, WorkoutEntry, CalorieEntry
+from app.models import WeightEntry, SleepEntry, WakeTimeEntry, WorkoutEntry, CalorieEntry, MealPreset
 from app.pool_schedule import get_pool_status, get_weekly_schedule
+from app.food_db import search_foods, get_food_by_id, add_custom_food, get_food_count, init_food_db
+from app.validation import (
+    validate_weight, validate_calories_single, validate_calories_daily,
+    validate_sleep, validate_macros
+)
 
 main_bp = Blueprint("main", __name__)
 
@@ -179,6 +184,37 @@ def dashboard():
         "days_with_workout": len(workout_by_date),
     }
     
+    # Calorie data
+    calorie_entries = CalorieEntry.query.filter(
+        CalorieEntry.date >= start_date,
+        CalorieEntry.date <= end_date
+    ).order_by(CalorieEntry.date).all()
+    
+    # Group calories by date
+    calories_by_date = {}
+    for e in calorie_entries:
+        d = e.date.isoformat()
+        if d not in calories_by_date:
+            calories_by_date[d] = 0
+        calories_by_date[d] += e.calories
+    
+    calorie_dates = sorted(calories_by_date.keys())
+    calorie_values = [calories_by_date[d] for d in calorie_dates]
+    calorie_chart = create_bar_chart(calorie_dates, calorie_values, "Daily Calories", "kcal", "#ef4444")
+    calorie_metrics = calculate_metrics(calorie_values)
+    
+    # Today's calories breakdown
+    today_entries = CalorieEntry.query.filter(
+        CalorieEntry.date == date.today()
+    ).order_by(CalorieEntry.created_at).all()
+    today_calories = sum(e.calories for e in today_entries)
+    
+    # Get presets for quick-add
+    presets = MealPreset.query.order_by(MealPreset.category, MealPreset.name).all()
+    
+    # Food database status
+    food_count = get_food_count()
+    
     # Pool schedule
     pool_status = get_pool_status()
     pool_weekly = get_weekly_schedule()
@@ -194,6 +230,12 @@ def dashboard():
         wake_metrics=wake_metrics,
         workout_chart=workout_chart,
         workout_metrics=workout_metrics,
+        calorie_chart=calorie_chart,
+        calorie_metrics=calorie_metrics,
+        today_entries=today_entries,
+        today_calories=today_calories,
+        presets=presets,
+        food_count=food_count,
         pool_status=pool_status,
         pool_weekly=pool_weekly,
         today=date.today().isoformat(),
@@ -289,6 +331,201 @@ def delete_workout(workout_id):
     db.session.delete(entry)
     db.session.commit()
     return jsonify({"status": "ok"})
+
+
+# --- Food Search API ---
+
+@main_bp.route("/api/foods/search")
+def search_foods_api():
+    """Search the food database."""
+    query = request.args.get("q", "")
+    limit = int(request.args.get("limit", 20))
+    
+    results = search_foods(query, limit=limit)
+    return jsonify({"foods": results})
+
+
+@main_bp.route("/api/foods/<int:food_id>")
+def get_food(food_id):
+    """Get a specific food by ID."""
+    food = get_food_by_id(food_id)
+    if not food:
+        return jsonify({"error": "Food not found"}), 404
+    return jsonify(food)
+
+
+@main_bp.route("/api/foods", methods=["POST"])
+def create_custom_food():
+    """Add a custom food to the database."""
+    data = request.get_json()
+    
+    food_id = add_custom_food(
+        name=data["name"],
+        calories=float(data["calories"]),
+        protein=float(data["protein"]) if data.get("protein") else None,
+        carbs=float(data["carbs"]) if data.get("carbs") else None,
+        fat=float(data["fat"]) if data.get("fat") else None,
+        serving_size=float(data.get("serving_size", 100)),
+        serving_unit=data.get("serving_unit", "g"),
+        brand=data.get("brand"),
+    )
+    
+    return jsonify({"status": "ok", "id": food_id})
+
+
+# --- Calorie Entry API ---
+
+@main_bp.route("/api/calories", methods=["POST"])
+def add_calorie_entry():
+    """Add a calorie entry."""
+    data = request.get_json()
+    
+    entry_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+    calories = float(data["calories"])
+    meal_name = data["meal_name"]
+    
+    # Validation
+    validation = validate_calories_single(calories)
+    if not validation.is_valid:
+        return jsonify({"status": "error", "message": validation.error_message}), 400
+    
+    # Check macros if provided
+    protein = float(data["protein"]) if data.get("protein") else None
+    carbs = float(data["carbs"]) if data.get("carbs") else None
+    fat = float(data["fat"]) if data.get("fat") else None
+    
+    warnings = []
+    if validation.has_warning:
+        warnings.append(validation.warning_message)
+    
+    if protein is not None and carbs is not None and fat is not None:
+        macro_validation = validate_macros(calories, protein, carbs, fat)
+        if macro_validation.has_warning:
+            warnings.append(macro_validation.warning_message)
+    
+    # Check daily total
+    daily_validation = validate_calories_daily(entry_date, calories)
+    if daily_validation.has_warning:
+        warnings.append(daily_validation.warning_message)
+    
+    entry = CalorieEntry(
+        date=entry_date,
+        meal_name=meal_name,
+        calories=calories,
+        protein_g=protein,
+        carbs_g=carbs,
+        fat_g=fat,
+        meal_type=data.get("meal_type"),
+    )
+    db.session.add(entry)
+    db.session.commit()
+    
+    return jsonify({
+        "status": "ok",
+        "id": entry.id,
+        "warnings": warnings if warnings else None
+    })
+
+
+@main_bp.route("/api/calories/<int:entry_id>", methods=["DELETE"])
+def delete_calorie_entry(entry_id):
+    """Delete a calorie entry."""
+    entry = CalorieEntry.query.get_or_404(entry_id)
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+
+@main_bp.route("/api/calories/today")
+def get_today_calories():
+    """Get today's calorie entries."""
+    entries = CalorieEntry.query.filter(
+        CalorieEntry.date == date.today()
+    ).order_by(CalorieEntry.created_at).all()
+    
+    total = sum(e.calories for e in entries)
+    
+    return jsonify({
+        "entries": [e.to_dict() for e in entries],
+        "total": total
+    })
+
+
+# --- Meal Preset API ---
+
+@main_bp.route("/api/presets", methods=["GET"])
+def get_presets():
+    """Get all meal presets."""
+    presets = MealPreset.query.order_by(MealPreset.category, MealPreset.name).all()
+    return jsonify({"presets": [p.to_dict() for p in presets]})
+
+
+@main_bp.route("/api/presets", methods=["POST"])
+def create_preset():
+    """Create a new meal preset."""
+    data = request.get_json()
+    
+    preset = MealPreset(
+        name=data["name"],
+        category=data.get("category"),
+        calories=float(data["calories"]),
+        protein_g=float(data["protein"]) if data.get("protein") else None,
+        carbs_g=float(data["carbs"]) if data.get("carbs") else None,
+        fat_g=float(data["fat"]) if data.get("fat") else None,
+    )
+    db.session.add(preset)
+    db.session.commit()
+    
+    return jsonify({"status": "ok", "id": preset.id})
+
+
+@main_bp.route("/api/presets/<int:preset_id>", methods=["PUT"])
+def update_preset(preset_id):
+    """Update a meal preset."""
+    preset = MealPreset.query.get_or_404(preset_id)
+    data = request.get_json()
+    
+    preset.name = data.get("name", preset.name)
+    preset.category = data.get("category", preset.category)
+    preset.calories = float(data["calories"]) if data.get("calories") else preset.calories
+    preset.protein_g = float(data["protein"]) if data.get("protein") else preset.protein_g
+    preset.carbs_g = float(data["carbs"]) if data.get("carbs") else preset.carbs_g
+    preset.fat_g = float(data["fat"]) if data.get("fat") else preset.fat_g
+    
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+
+@main_bp.route("/api/presets/<int:preset_id>", methods=["DELETE"])
+def delete_preset(preset_id):
+    """Delete a meal preset."""
+    preset = MealPreset.query.get_or_404(preset_id)
+    db.session.delete(preset)
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+
+@main_bp.route("/api/presets/<int:preset_id>/log", methods=["POST"])
+def log_preset(preset_id):
+    """Log a preset as a calorie entry for today (or specified date)."""
+    preset = MealPreset.query.get_or_404(preset_id)
+    data = request.get_json() or {}
+    
+    entry_date = datetime.strptime(data["date"], "%Y-%m-%d").date() if data.get("date") else date.today()
+    
+    entry = CalorieEntry(
+        date=entry_date,
+        meal_name=preset.name,
+        calories=preset.calories,
+        protein_g=preset.protein_g,
+        carbs_g=preset.carbs_g,
+        fat_g=preset.fat_g,
+        meal_type=preset.category,
+    )
+    db.session.add(entry)
+    db.session.commit()
+    
+    return jsonify({"status": "ok", "id": entry.id})
 
 
 # --- CSV Export ---
