@@ -1035,5 +1035,32 @@
             alert('Error: ' + error.message);
         }
     }
+    
+    // --- Auto-refresh when data is updated ---
+    let lastUpdated = null;
+    const AUTO_REFRESH_INTERVAL = 5000; // Check every 5 seconds
+    
+    async function checkForUpdates() {
+        try {
+            const response = await fetch('/api/last-updated');
+            const data = await response.json();
+            
+            if (lastUpdated === null) {
+                // First check - just store the value
+                lastUpdated = data.last_updated;
+            } else if (data.last_updated && data.last_updated !== lastUpdated) {
+                // Data changed - reload the page
+                console.log('Data updated, refreshing...');
+                window.location.reload();
+            }
+        } catch (error) {
+            console.log('Auto-refresh check failed:', error);
+        }
+    }
+    
+    // Start auto-refresh polling
+    setInterval(checkForUpdates, AUTO_REFRESH_INTERVAL);
+    // Initial check
+    checkForUpdates();
 </script>
 {% endblock %}

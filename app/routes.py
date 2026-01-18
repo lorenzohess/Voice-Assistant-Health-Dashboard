@@ -582,6 +582,33 @@ def log_preset(preset_id):
     return jsonify({"status": "ok", "id": entry.id})
 
 
+# --- Dashboard Refresh API ---
+
+@main_bp.route("/api/last-updated", methods=["GET"])
+def get_last_updated():
+    """Get the timestamp of the most recent data update.
+    
+    Used by the dashboard to detect when to auto-refresh.
+    """
+    # Check the most recent entry across all tables
+    latest = None
+    
+    # Check each table for the most recent created_at
+    for model in [WeightEntry, SleepEntry, WakeTimeEntry, WorkoutEntry, CalorieEntry, CustomMetricEntry]:
+        try:
+            entry = model.query.order_by(model.created_at.desc()).first()
+            if entry and entry.created_at:
+                if latest is None or entry.created_at > latest:
+                    latest = entry.created_at
+        except:
+            pass
+    
+    if latest:
+        return jsonify({"last_updated": latest.isoformat()})
+    else:
+        return jsonify({"last_updated": None})
+
+
 # --- Custom Metrics API ---
 
 @main_bp.route("/api/custom-metrics", methods=["GET"])

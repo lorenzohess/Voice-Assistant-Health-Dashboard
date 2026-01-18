@@ -217,7 +217,7 @@ PATTERNS = [
     # Calories - food lookup (will need API to compute)
     # This pattern is greedy, so specific patterns (like vegetables) must come first
     (
-        r"(?:add(?:ed)?|log(?:ged)?|ate|had)\s+(\d+(?:\.\d+)?)\s*(g|oz|cup|cups|piece|pieces|serving|servings)?\s*(?:of\s+)?(.+?)(?:\s+to\s+calories)?$",
+        r"(?:add(?:ed)?|log(?:ged)?|ate|had)\s+(\d+(?:\.\d+)?)\s*(g|grams?|oz|ounces?|cups?|pieces?|servings?|tbsp|tablespoons?|tsp|teaspoons?)?\s*(?:of\s+)?(.+?)(?:\s+to\s+calories)?$",
         "add_food",
         lambda m: {
             "quantity": float(m.group(1)),

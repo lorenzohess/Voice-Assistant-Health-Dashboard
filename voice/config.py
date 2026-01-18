@@ -25,7 +25,7 @@ WAKE_WORD_REFRACTORY = 2.0  # Seconds to wait after detection before listening a
 VOSK_MODEL_PATH = str(MODELS_DIR / "vosk-model")
 
 # Piper TTS settings
-PIPER_MODEL_PATH = str(MODELS_DIR / "piper" / "en_US-bryce-medium.onnx")
+PIPER_MODEL_PATH = str(MODELS_DIR / "piper" / "en_US-danny-medium.onnx")
 
 # Ollama settings (for intent fallback)
 OLLAMA_URL = "http://localhost:11434/api/generate"
