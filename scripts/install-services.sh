@@ -56,13 +56,27 @@ sed -e "s|/home/pi2/health-dashboard|$PROJECT_DIR|g" \
 
 echo "  Installed: $USER_SERVICE_DIR/voice-assistant.service"
 
+# --- Install alarm as USER service (needs PulseAudio for mpv) ---
+echo ""
+echo "=== Installing alarm (user service) ==="
+
+sed -e "s|/home/pi2/health-dashboard|$PROJECT_DIR|g" \
+    "$SCRIPT_DIR/alarm.service" > "$USER_SERVICE_DIR/alarm.service"
+
+echo "  Installed: $USER_SERVICE_DIR/alarm.service"
+
 # Reload user daemon (must run as the target user)
 if [ "$USER" = "$PROJECT_USER" ]; then
     systemctl --user daemon-reload
     systemctl --user enable voice-assistant.service
+    systemctl --user enable alarm.service
     echo "  Enabled voice-assistant user service"
+    echo "  Enabled alarm user service"
 else
-    echo "  NOTE: Run as $PROJECT_USER to enable: systemctl --user daemon-reload && systemctl --user enable voice-assistant"
+    echo "  NOTE: Run as $PROJECT_USER to enable:"
+    echo "    systemctl --user daemon-reload"
+    echo "    systemctl --user enable voice-assistant"
+    echo "    systemctl --user enable alarm"
 fi
 
 echo ""
@@ -73,11 +87,19 @@ echo "  sudo systemctl start health-dashboard"
 echo "  sudo systemctl status health-dashboard"
 echo "  journalctl -u health-dashboard -f"
 echo ""
-echo "User service (voice assistant) - run as $PROJECT_USER:"
-echo "  systemctl --user start voice-assistant"
-echo "  systemctl --user status voice-assistant"
-echo "  journalctl --user -u voice-assistant -f"
+echo "User services (run as $PROJECT_USER):"
 echo ""
-echo "To start both:"
+echo "  Voice assistant:"
+echo "    systemctl --user start voice-assistant"
+echo "    systemctl --user status voice-assistant"
+echo "    journalctl --user -u voice-assistant -f"
+echo ""
+echo "  Alarm:"
+echo "    systemctl --user start alarm"
+echo "    systemctl --user status alarm"
+echo "    journalctl --user -u alarm -f"
+echo ""
+echo "To start all services:"
 echo "  sudo systemctl start health-dashboard"
 echo "  systemctl --user start voice-assistant"
+echo "  systemctl --user start alarm"

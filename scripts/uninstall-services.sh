@@ -26,6 +26,20 @@ fi
 rm -f "$USER_SERVICE_FILE"
 echo "  Removed: $USER_SERVICE_FILE"
 
+# --- Uninstall alarm USER service ---
+echo ""
+echo "=== Removing alarm (user service) ==="
+
+ALARM_SERVICE_FILE="$PROJECT_HOME/.config/systemd/user/alarm.service"
+
+if [ "$USER" = "$PROJECT_USER" ]; then
+    systemctl --user stop alarm.service 2>/dev/null || true
+    systemctl --user disable alarm.service 2>/dev/null || true
+fi
+
+rm -f "$ALARM_SERVICE_FILE"
+echo "  Removed: $ALARM_SERVICE_FILE"
+
 if [ "$USER" = "$PROJECT_USER" ]; then
     systemctl --user daemon-reload
 fi

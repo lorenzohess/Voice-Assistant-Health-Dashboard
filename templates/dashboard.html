@@ -236,6 +236,31 @@
         </div>
     </div>
     
+    <!-- Alarm Control -->
+    <div class="sidebar-panel alarm-panel">
+        <div class="alarm-header">
+            <span class="alarm-icon">⏰</span>
+            <span class="alarm-label">Alarm</span>
+            <label class="alarm-toggle">
+                <input type="checkbox" id="alarmEnabled" onchange="toggleAlarmEnabled()">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="alarm-time-row">
+            <input type="time" id="alarmTime" value="08:00" onchange="updateAlarmTime()">
+            <button class="alarm-stop-btn" id="alarmStopBtn" onclick="stopAlarm()" style="display: none;">Stop</button>
+        </div>
+        <div class="alarm-days" id="alarmDays">
+            <label class="day-checkbox"><input type="checkbox" value="mon" checked> M</label>
+            <label class="day-checkbox"><input type="checkbox" value="tue" checked> T</label>
+            <label class="day-checkbox"><input type="checkbox" value="wed" checked> W</label>
+            <label class="day-checkbox"><input type="checkbox" value="thu" checked> T</label>
+            <label class="day-checkbox"><input type="checkbox" value="fri" checked> F</label>
+            <label class="day-checkbox"><input type="checkbox" value="sat" checked> S</label>
+            <label class="day-checkbox"><input type="checkbox" value="sun" checked> S</label>
+        </div>
+    </div>
+    
     <!-- Pool Schedule -->
     <div class="sidebar-panel pool-panel">
         <div class="panel-header">
@@ -1256,6 +1281,84 @@
     
     // Get initial volume state
     getVolumeState();
+    
+    // --- Alarm Control ---
+    let alarmPlaying = false;
+    
+    async function loadAlarmConfig() {
+        try {
+            const response = await fetch('/api/alarm/config');
+            const config = await response.json();
+            
+            document.getElementById('alarmEnabled').checked = config.enabled;
+            document.getElementById('alarmTime').value = config.time;
+            
+            // Set day checkboxes
+            const dayCheckboxes = document.querySelectorAll('#alarmDays input[type="checkbox"]');
+            dayCheckboxes.forEach(cb => {
+                cb.checked = config.days.includes(cb.value);
+                cb.addEventListener('change', updateAlarmDays);
+            });
+        } catch (error) {
+            console.error('Failed to load alarm config:', error);
+        }
+    }
+    
+    async function toggleAlarmEnabled() {
+        const enabled = document.getElementById('alarmEnabled').checked;
+        await saveAlarmConfig({ enabled });
+    }
+    
+    async function updateAlarmTime() {
+        const time = document.getElementById('alarmTime').value;
+        await saveAlarmConfig({ time });
+    }
+    
+    async function updateAlarmDays() {
+        const days = [];
+        document.querySelectorAll('#alarmDays input[type="checkbox"]:checked').forEach(cb => {
+            days.push(cb.value);
+        });
+        await saveAlarmConfig({ days });
+    }
+    
+    async function saveAlarmConfig(updates) {
+        try {
+            await fetch('/api/alarm/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(updates)
+            });
+        } catch (error) {
+            console.error('Failed to save alarm config:', error);
+        }
+    }
+    
+    async function stopAlarm() {
+        try {
+            await fetch('/api/alarm/stop', { method: 'POST' });
+            document.getElementById('alarmStopBtn').style.display = 'none';
+            alarmPlaying = false;
+        } catch (error) {
+            console.error('Failed to stop alarm:', error);
+        }
+    }
+    
+    async function checkAlarmStatus() {
+        try {
+            const response = await fetch('/api/alarm/status');
+            const result = await response.json();
+            alarmPlaying = result.playing;
+            document.getElementById('alarmStopBtn').style.display = alarmPlaying ? 'inline-block' : 'none';
+        } catch (error) {
+            // Ignore errors
+        }
+    }
+    
+    // Load alarm config and check status periodically
+    loadAlarmConfig();
+    checkAlarmStatus();
+    setInterval(checkAlarmStatus, 5000);  // Check every 5 seconds
     
     // --- Clear Display Data ---
     function clearDisplayData() {

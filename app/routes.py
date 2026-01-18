@@ -982,3 +982,117 @@ def export_all():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=health_data_export.csv"}
     )
+
+
+# =============================================================================
+# Alarm API
+# =============================================================================
+
+@main_bp.route("/api/alarm/config", methods=["GET"])
+def get_alarm_config():
+    """Get current alarm configuration."""
+    from pathlib import Path
+    import json
+    
+    config_file = Path(__file__).parent.parent / "data" / "alarm_config.json"
+    default_config = {
+        "enabled": True,
+        "time": "08:00",
+        "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+    }
+    
+    if not config_file.exists():
+        return jsonify(default_config)
+    
+    try:
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        return jsonify({**default_config, **config})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route("/api/alarm/config", methods=["POST"])
+def set_alarm_config():
+    """Update alarm configuration."""
+    from pathlib import Path
+    import json
+    import re
+    
+    config_file = Path(__file__).parent.parent / "data" / "alarm_config.json"
+    data = request.get_json()
+    
+    # Load existing config
+    existing = {
+        "enabled": True,
+        "time": "08:00",
+        "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+    }
+    if config_file.exists():
+        try:
+            with open(config_file, "r") as f:
+                existing = {**existing, **json.load(f)}
+        except Exception:
+            pass
+    
+    # Update with new values
+    if "enabled" in data:
+        existing["enabled"] = bool(data["enabled"])
+    
+    if "time" in data:
+        # Validate time format HH:MM
+        time_str = data["time"]
+        if not re.match(r"^\d{2}:\d{2}$", time_str):
+            return jsonify({"error": "Invalid time format. Use HH:MM"}), 400
+        existing["time"] = time_str
+    
+    if "days" in data:
+        valid_days = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+        days = [d.lower() for d in data["days"] if d.lower() in valid_days]
+        existing["days"] = days
+    
+    # Save config
+    try:
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_file, "w") as f:
+            json.dump(existing, f, indent=2)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+    return jsonify({"status": "ok", "config": existing})
+
+
+@main_bp.route("/api/alarm/stop", methods=["POST"])
+def stop_alarm():
+    """Stop the currently playing alarm music."""
+    import subprocess
+    
+    try:
+        # Find and kill mpv processes started by alarm
+        # Use pkill to kill all mpv processes (simplest approach)
+        result = subprocess.run(["pkill", "-f", "mpv.*music"], capture_output=True)
+        
+        if result.returncode == 0:
+            return jsonify({"status": "ok", "message": "Alarm stopped"})
+        else:
+            return jsonify({"status": "ok", "message": "No alarm was playing"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@main_bp.route("/api/alarm/status", methods=["GET"])
+def get_alarm_status():
+    """Check if alarm music is currently playing."""
+    import subprocess
+    
+    try:
+        # Check if mpv is running with music directory
+        result = subprocess.run(
+            ["pgrep", "-f", "mpv.*music"],
+            capture_output=True
+        )
+        is_playing = result.returncode == 0
+        
+        return jsonify({"playing": is_playing})
+    except Exception:
+        return jsonify({"playing": False})

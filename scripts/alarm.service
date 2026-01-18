@@ -1,0 +1,17 @@
+[Unit]
+Description=Health Dashboard Alarm Service
+After=network.target sound.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi2/health-dashboard
+ExecStart=/home/pi2/health-dashboard/venv/bin/python -m alarm.main
+Restart=always
+RestartSec=10
+
+# Audio environment for PulseAudio
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+Environment="PULSE_SERVER=unix:/run/user/1000/pulse/native"
+
+[Install]
+WantedBy=default.target
