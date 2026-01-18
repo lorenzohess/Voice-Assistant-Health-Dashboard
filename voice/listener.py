@@ -353,13 +353,22 @@ class VoiceListener:
             
             # Transcribe with Moonshine (expects 2D: batch x samples)
             audio_batch = audio_float[np.newaxis, :]
-            text = self.moonshine_model.generate(audio_batch)
+            result = self.moonshine_model.generate(audio_batch)
             
-            # Handle if result is a list
-            if isinstance(text, list):
-                text = " ".join(text)
+            if DEBUG:
+                print(f"[Listener] Moonshine raw result: {result} (type: {type(result)})")
             
-            text = text.strip() if text else ""
+            # Handle nested list result: [[token1, token2, ...]] or [["text"]]
+            if isinstance(result, list):
+                if len(result) > 0 and isinstance(result[0], list):
+                    # Nested list - flatten first level
+                    text = " ".join(str(item) for sublist in result for item in sublist)
+                else:
+                    text = " ".join(str(item) for item in result)
+            else:
+                text = str(result) if result else ""
+            
+            text = text.strip()
             
             if DEBUG:
                 print(f"[Listener] Transcribed: {text}")
