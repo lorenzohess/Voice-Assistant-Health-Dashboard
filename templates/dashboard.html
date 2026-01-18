@@ -225,7 +225,10 @@
             <span class="volume-label">Volume</span>
             <span class="volume-value" id="volumeValue">65%</span>
         </div>
-        <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="65" oninput="updateVolume(this.value)">
+        <div class="volume-controls">
+            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="65" oninput="updateVolume(this.value)">
+            <button class="mute-btn" id="muteBtn" onclick="toggleMute()" title="Mute">🔇</button>
+        </div>
     </div>
     
     <!-- Pool Schedule -->
@@ -1088,10 +1091,12 @@
         const isoDate = now.toISOString().split('T')[0];
         document.getElementById('dateIso').textContent = isoDate;
         
-        // Time: HH:MM
-        const hours = String(now.getHours()).padStart(2, '0');
+        // Time: 12-hour format with AM/PM
+        let hours = now.getHours();
         const minutes = String(now.getMinutes()).padStart(2, '0');
-        document.getElementById('timeClock').textContent = `${hours}:${minutes}`;
+        const period = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12; // Convert 0 to 12 for midnight
+        document.getElementById('timeClock').innerHTML = `${hours}:${minutes} <span class="time-period">${period}</span>`;
     }
     
     // Update immediately and then every minute
@@ -1100,18 +1105,23 @@
     
     // --- Volume Control ---
     let currentVolume = 65;
+    let isMuted = false;
+    let volumeBeforeMute = 65;
     
-    function updateVolumeUI(value) {
+    function updateVolumeUI(value, muted = false) {
         currentVolume = parseInt(value);
+        isMuted = muted;
+        
         document.getElementById('volumeValue').textContent = currentVolume + '%';
         
         // Update slider track fill
         const slider = document.getElementById('volumeSlider');
         slider.style.background = `linear-gradient(to right, var(--accent-blue) 0%, var(--accent-blue) ${currentVolume}%, var(--bg-secondary) ${currentVolume}%, var(--bg-secondary) 100%)`;
+        slider.value = currentVolume;
         
         // Update icon based on level
         const icon = document.getElementById('volumeIcon');
-        if (currentVolume === 0) {
+        if (isMuted || currentVolume === 0) {
             icon.textContent = '🔇';
         } else if (currentVolume < 33) {
             icon.textContent = '🔈';
@@ -1120,10 +1130,15 @@
         } else {
             icon.textContent = '🔊';
         }
+        
+        // Update mute button state
+        const muteBtn = document.getElementById('muteBtn');
+        muteBtn.classList.toggle('muted', isMuted);
     }
     
     async function updateVolume(value) {
-        updateVolumeUI(value);
+        isMuted = false; // Unmute when adjusting volume
+        updateVolumeUI(value, false);
         
         try {
             await fetch('/api/volume/set', {
@@ -1136,13 +1151,30 @@
         }
     }
     
+    async function toggleMute() {
+        try {
+            const response = await fetch('/api/volume/toggle', { method: 'POST' });
+            const result = await response.json();
+            isMuted = result.muted;
+            
+            if (isMuted) {
+                volumeBeforeMute = currentVolume;
+            }
+            
+            // Re-fetch current state to get accurate volume
+            await getVolumeState();
+        } catch (error) {
+            console.error('Mute toggle failed:', error);
+        }
+    }
+    
     async function getVolumeState() {
         try {
             const response = await fetch('/api/volume/state');
             const result = await response.json();
             currentVolume = result.volume || 65;
-            document.getElementById('volumeSlider').value = currentVolume;
-            updateVolumeUI(currentVolume);
+            isMuted = result.muted || false;
+            updateVolumeUI(currentVolume, isMuted);
         } catch (error) {
             console.error('Volume state check failed:', error);
         }
