@@ -26,6 +26,65 @@ from .config import (
 )
 
 
+def find_working_input_device(target_rate=16000):
+    """Find an input device that supports the target sample rate."""
+    devices = sd.query_devices()
+    
+    # Try specified device first
+    if AUDIO_INPUT_DEVICE is not None:
+        try:
+            device_info = sd.query_devices(AUDIO_INPUT_DEVICE, 'input')
+            # Test if it works
+            sd.check_input_settings(
+                device=AUDIO_INPUT_DEVICE,
+                channels=1,
+                dtype='int16',
+                samplerate=target_rate
+            )
+            if DEBUG:
+                print(f"[Audio] Using specified device {AUDIO_INPUT_DEVICE}: {device_info['name']}")
+            return AUDIO_INPUT_DEVICE
+        except Exception as e:
+            if DEBUG:
+                print(f"[Audio] Specified device {AUDIO_INPUT_DEVICE} failed: {e}")
+    
+    # Try default device
+    try:
+        default_input = sd.default.device[0]
+        if default_input is not None:
+            sd.check_input_settings(
+                device=default_input,
+                channels=1,
+                dtype='int16',
+                samplerate=target_rate
+            )
+            device_info = sd.query_devices(default_input, 'input')
+            if DEBUG:
+                print(f"[Audio] Using default device {default_input}: {device_info['name']}")
+            return default_input
+    except Exception as e:
+        if DEBUG:
+            print(f"[Audio] Default device failed: {e}")
+    
+    # Search for any working input device
+    for i, device in enumerate(devices):
+        if device['max_input_channels'] > 0:
+            try:
+                sd.check_input_settings(
+                    device=i,
+                    channels=1,
+                    dtype='int16',
+                    samplerate=target_rate
+                )
+                if DEBUG:
+                    print(f"[Audio] Found working device {i}: {device['name']}")
+                return i
+            except Exception:
+                continue
+    
+    raise RuntimeError(f"No audio input device found that supports {target_rate}Hz")
+
+
 class VoiceListener:
     """Handles wake word detection and speech-to-text."""
     
@@ -34,6 +93,11 @@ class VoiceListener:
         self.chunk_size = CHUNK_SIZE
         self.last_wake_time = 0  # For refractory period
         self.stt_engine = STT_ENGINE.lower()
+        
+        # Find working audio device
+        if DEBUG:
+            print("[Listener] Finding audio input device...")
+        self.audio_device = find_working_input_device(self.sample_rate)
         
         # Load wake word model
         if DEBUG:
@@ -103,7 +167,7 @@ class VoiceListener:
                 channels=CHANNELS,
                 dtype='int16',
                 blocksize=self.chunk_size,
-                device=AUDIO_INPUT_DEVICE,
+                device=self.audio_device,
             ) as stream:
                 while True:
                     audio_data, _ = stream.read(self.chunk_size)
@@ -168,7 +232,7 @@ class VoiceListener:
                 channels=CHANNELS,
                 dtype='int16',
                 blocksize=self.chunk_size,
-                device=AUDIO_INPUT_DEVICE,
+                device=self.audio_device,
             ) as stream:
                 while True:
                     audio_data, _ = stream.read(self.chunk_size)
@@ -232,7 +296,7 @@ class VoiceListener:
                 channels=CHANNELS,
                 dtype='int16',
                 blocksize=self.chunk_size,
-                device=AUDIO_INPUT_DEVICE,
+                device=self.audio_device,
             ) as stream:
                 while True:
                     audio_data, _ = stream.read(self.chunk_size)
@@ -313,7 +377,7 @@ class VoiceListener:
                 channels=CHANNELS,
                 dtype='int16',
                 blocksize=self.chunk_size,
-                device=AUDIO_INPUT_DEVICE,
+                device=self.audio_device,
             ) as stream:
                 while True:
                     audio_data, _ = stream.read(self.chunk_size)

@@ -17,6 +17,7 @@ Environment=PYTHONUNBUFFERED=1
 Environment=HEALTH_API_URL=http://localhost:5000
 Environment=STT_ENGINE=moonshine
 Environment=HF_HUB_OFFLINE=1
+Environment=STARTUP_DELAY=3
 
 # Audio access
 SupplementaryGroups=audio

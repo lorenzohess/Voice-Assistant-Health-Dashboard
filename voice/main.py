@@ -26,6 +26,9 @@ def main():
     parser.add_argument(
         "--single", action="store_true", help="Process single command and exit"
     )
+    parser.add_argument(
+        "--list-devices", action="store_true", help="List audio devices and exit"
+    )
     args = parser.parse_args()
 
     # Set debug mode before imports
@@ -33,11 +36,26 @@ def main():
         os.environ["VOICE_DEBUG"] = "1"
 
     # Now import modules (they read DEBUG from env)
-    from voice.config import DEBUG, WAKE_WORD_MODEL
+    import time
+    from voice.config import DEBUG, WAKE_WORD_MODEL, STARTUP_DELAY, AUDIO_INPUT_DEVICE
     from voice.listener import VoiceListener
     from voice.intent import parse_intent
     from voice.commands import execute_command
     from voice.tts import speak, get_tts
+    
+    # List audio devices if requested
+    if args.list_devices:
+        import sounddevice as sd
+        print("Available audio devices:")
+        print(sd.query_devices())
+        print(f"\nDefault input device: {sd.default.device[0]}")
+        print(f"Default output device: {sd.default.device[1]}")
+        return
+    
+    # Startup delay (for systemd - wait for audio devices)
+    if STARTUP_DELAY > 0:
+        print(f"Waiting {STARTUP_DELAY}s for audio devices...")
+        time.sleep(STARTUP_DELAY)
 
     # Handle Ctrl+C gracefully
     def signal_handler(sig, frame):

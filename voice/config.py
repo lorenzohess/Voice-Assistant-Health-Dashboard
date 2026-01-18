@@ -14,7 +14,12 @@ CHUNK_SIZE = 1280  # 80ms at 16kHz - good for wake word detection
 
 # Microphone - set to None for default, or specify device index
 # Use `python -c "import sounddevice; print(sounddevice.query_devices())"` to list
-AUDIO_INPUT_DEVICE = None  # Will use default capture device
+AUDIO_INPUT_DEVICE = os.environ.get("AUDIO_DEVICE", None)  # None = default capture device
+if AUDIO_INPUT_DEVICE is not None:
+    AUDIO_INPUT_DEVICE = int(AUDIO_INPUT_DEVICE)
+
+# Startup delay for systemd (wait for audio devices to be ready)
+STARTUP_DELAY = float(os.environ.get("STARTUP_DELAY", "0"))
 
 # Wake word settings
 WAKE_WORD_MODEL = "hey_jarvis"
