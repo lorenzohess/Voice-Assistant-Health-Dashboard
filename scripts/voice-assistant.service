@@ -13,11 +13,12 @@ Restart=always
 RestartSec=5
 
 # Environment
-Environment=PYTHONUNBUFFERED=1
-Environment=HEALTH_API_URL=http://localhost:5000
-Environment=STT_ENGINE=moonshine
-Environment=HF_HUB_OFFLINE=1
-Environment=STARTUP_DELAY=5
+Environment="PYTHONUNBUFFERED=1"
+Environment="HEALTH_API_URL=http://localhost:5000"
+Environment="STT_ENGINE=moonshine"
+Environment="HF_HUB_OFFLINE=1"
+Environment="STARTUP_DELAY=5"
+Environment="AUDIO_DEVICE=4"
 
 # Audio access
 SupplementaryGroups=audio

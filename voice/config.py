@@ -14,7 +14,7 @@ CHUNK_SIZE = 1280  # 80ms at 16kHz - good for wake word detection
 
 # Microphone - set to None for default, or specify device index
 # Use `python -c "import sounddevice; print(sounddevice.query_devices())"` to list
-AUDIO_INPUT_DEVICE = os.environ.get("AUDIO_DEVICE", None)  # None = default capture device
+AUDIO_INPUT_DEVICE = os.environ.get("AUDIO_DEVICE", 3)  # None = default capture device
 if AUDIO_INPUT_DEVICE is not None:
     AUDIO_INPUT_DEVICE = int(AUDIO_INPUT_DEVICE)
 
@@ -27,7 +27,7 @@ WAKE_WORD_THRESHOLD = 0.7  # Confidence threshold (0-1), higher = fewer false po
 WAKE_WORD_REFRACTORY = 2.0  # Seconds to wait after detection before listening again
 
 # Speech-to-Text settings
-# STT_ENGINE: "vosk" (fast, less accurate), "whisper" (slower, more accurate), 
+# STT_ENGINE: "vosk" (fast, less accurate), "whisper" (slower, more accurate),
 #             or "moonshine" (fast AND accurate, best for Pi)
 STT_ENGINE = os.environ.get("STT_ENGINE", "vosk")
 
