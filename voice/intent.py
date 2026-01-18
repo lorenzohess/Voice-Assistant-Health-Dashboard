@@ -94,8 +94,53 @@ def words_to_number(text: str) -> Optional[float]:
     return total if total > 0 else None
 
 
+def parse_time_words(text: str) -> tuple:
+    """
+    Parse time expressions like "seven thirty am" -> (7, 30, 'am').
+    Returns (hour, minute, ampm) or (None, None, None) if not a time.
+    """
+    # Match patterns like "seven thirty am", "eight fifteen pm", "seven am"
+    time_pattern = r'\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(oh\s+\w+|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|twenty\s+\w+|thirty|thirty\s+\w+|forty|forty\s+\w+|fifty|fifty\s+\w+)?\s*(am|pm|a\s*m|p\s*m)?\b'
+    
+    match = re.search(time_pattern, text.lower())
+    if not match:
+        return None, None, None
+    
+    hour_word = match.group(1)
+    minute_word = match.group(2)
+    ampm = match.group(3)
+    
+    # Convert hour
+    hour = WORD_NUMBERS.get(hour_word, 0)
+    
+    # Convert minutes
+    minute = 0
+    if minute_word:
+        minute_word = minute_word.strip()
+        if minute_word in TIME_MINUTES:
+            minute = TIME_MINUTES[minute_word]
+        else:
+            # Try word_to_number for compound like "twenty five"
+            minute = int(words_to_number(minute_word) or 0)
+    
+    if ampm:
+        ampm = ampm.replace(' ', '').lower()
+    
+    return hour, minute, ampm
+
+
 def preprocess_text(text: str) -> str:
-    """Preprocess text to normalize number words to digits."""
+    """Preprocess text to normalize number words to digits.
+    
+    Handles time expressions specially to avoid "seven thirty" -> "37".
+    """
+    result = text.lower()
+    
+    # DON'T preprocess if this looks like a wake time command
+    # (we handle those with special parsing)
+    if re.search(r'woke|wake', result):
+        return result
+    
     # Common patterns with word numbers
     patterns = [
         # "five hundred calories" -> "500 calories"
@@ -103,7 +148,6 @@ def preprocess_text(text: str) -> str:
          lambda m: str(int(words_to_number(m.group(1)))) if words_to_number(m.group(1)) else m.group(1)),
     ]
     
-    result = text.lower()
     for pattern, replacement in patterns:
         result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
     
@@ -205,7 +249,15 @@ PATTERNS = [
         lambda m: {"hours": float(m.group(1))}
     ),
     
-    # Wake time - supports "7 am", "7:30 am", "seven thirty am"
+    # Vegetables - MUST come before add_food pattern!
+    # Matches: "add", "had", "that" (common Vosk mishearing of "add")
+    (
+        r"(?:add(?:ed)?|log(?:ged)?|ate|had|that)\s+(\d+)\s*(?:servings?\s+)?(?:of\s+)?vegetable",
+        "log_vegetables",
+        lambda m: {"servings": int(m.group(1))}
+    ),
+    
+    # Wake time - digit format: "7 am", "7:30 am", "7 30 am"
     (
         r"(?:i\s+)?woke\s+(?:up\s+)?(?:at\s+)?(\d{1,2})\s+(\d{2})\s*(am|pm)?",
         "log_wake",
@@ -223,13 +275,6 @@ PATTERNS = [
         }
     ),
     
-    # Vegetables - "add", "had", "that" (common Vosk mishearing of "add")
-    (
-        r"(?:add(?:ed)?|log(?:ged)?|ate|had|that)\s+(\d+)\s*(?:servings?\s+)?(?:of\s+)?vegetables?",
-        "log_vegetables",
-        lambda m: {"servings": int(m.group(1))}
-    ),
-    
     # Workout
     (
         r"(?:i\s+)?(?:worked\s+out|exercised|did\s+(?:a\s+)?workout)\s*(?:for\s+)?(\d+)\s*(?:minutes?|mins?)?",
@@ -244,8 +289,46 @@ PATTERNS = [
 ]
 
 
+def parse_wake_time_words(text: str) -> Optional[ParsedIntent]:
+    """Special parser for wake time with word-based times like 'seven thirty am'."""
+    # Check if this is a wake time command
+    wake_match = re.search(r'woke\s+(?:up\s+)?(?:at\s+)?(.+)', text.lower())
+    if not wake_match:
+        return None
+    
+    time_part = wake_match.group(1).strip()
+    
+    # Try to parse the time part
+    hour, minute, ampm = parse_time_words(time_part)
+    
+    if hour is None:
+        return None
+    
+    # Handle AM/PM
+    if ampm == 'pm' and hour != 12:
+        hour += 12
+    elif ampm == 'am' and hour == 12:
+        hour = 0
+    
+    if DEBUG:
+        print(f"[Intent] Parsed wake time: {hour}:{minute:02d} from '{time_part}'")
+    
+    return ParsedIntent(
+        intent="log_wake",
+        params={"hour": hour, "minute": minute},
+        raw_text=text,
+        confidence=1.0
+    )
+
+
 def parse_with_regex(text: str) -> Optional[ParsedIntent]:
     """Try to parse intent using regex patterns."""
+    # Special handling for wake time (word-based times like "seven thirty am")
+    if re.search(r'woke', text.lower()):
+        result = parse_wake_time_words(text)
+        if result:
+            return result
+    
     # Preprocess to convert word numbers to digits
     processed = preprocess_text(text)
     

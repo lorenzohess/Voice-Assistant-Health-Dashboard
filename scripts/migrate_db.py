@@ -84,10 +84,95 @@ def migrate_health_db():
     conn.close()
     
     if changes > 0:
-        print(f"\nMigration complete! {changes} columns added.")
+        print(f"\nHealth DB migration complete! {changes} columns added.")
     else:
-        print("\nNo migrations needed. Database is up to date.")
+        print("\nHealth DB: No migrations needed.")
+
+
+def migrate_food_db():
+    """Apply migrations to foods.db."""
+    FOOD_DB = DATA_DIR / "foods.db"
+    
+    if not FOOD_DB.exists():
+        print(f"Food database not found: {FOOD_DB}")
+        print("Run import_usda.py to create it.")
+        return
+    
+    print(f"Migrating: {FOOD_DB}")
+    
+    conn = sqlite3.connect(FOOD_DB)
+    cursor = conn.cursor()
+    
+    changes = 0
+    
+    # Check if foods table exists
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='foods'")
+    if cursor.fetchone():
+        # Add new schema columns
+        if add_column_if_missing(cursor, "foods", "calories_per_unit", "REAL"):
+            # Migrate data: if old 'calories' column exists, copy as calories_per_unit / 100
+            try:
+                cursor.execute("UPDATE foods SET calories_per_unit = calories / 100.0 WHERE calories_per_unit IS NULL AND calories IS NOT NULL")
+                print("  Migrated calories -> calories_per_unit")
+            except:
+                pass
+            changes += 1
+        
+        if add_column_if_missing(cursor, "foods", "unit_type", "TEXT", "'mass'"):
+            changes += 1
+        
+        if add_column_if_missing(cursor, "foods", "canonical_unit", "TEXT", "'g'"):
+            changes += 1
+    
+    # Create food_aliases table if missing
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='food_aliases'")
+    if not cursor.fetchone():
+        print("  Creating food_aliases table...")
+        cursor.execute("""
+            CREATE TABLE food_aliases (
+                id INTEGER PRIMARY KEY,
+                food_id INTEGER NOT NULL,
+                alias TEXT NOT NULL,
+                FOREIGN KEY (food_id) REFERENCES foods(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_alias ON food_aliases(alias)")
+        changes += 1
+    
+    # Create unit_conversions table if missing
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='unit_conversions'")
+    if not cursor.fetchone():
+        print("  Creating unit_conversions table...")
+        cursor.execute("""
+            CREATE TABLE unit_conversions (
+                from_unit TEXT NOT NULL,
+                to_unit TEXT NOT NULL,
+                factor REAL NOT NULL,
+                PRIMARY KEY (from_unit, to_unit)
+            )
+        """)
+        # Insert standard conversions
+        conversions = [
+            ('oz', 'g', 28.35),
+            ('lb', 'g', 453.6),
+            ('kg', 'g', 1000),
+            ('cup', 'ml', 236.6),
+            ('tbsp', 'ml', 14.79),
+            ('tsp', 'ml', 4.93),
+            ('fl oz', 'ml', 29.57),
+        ]
+        cursor.executemany("INSERT OR IGNORE INTO unit_conversions VALUES (?, ?, ?)", conversions)
+        changes += 1
+    
+    conn.commit()
+    conn.close()
+    
+    if changes > 0:
+        print(f"\nFood DB migration complete! {changes} changes made.")
+    else:
+        print("\nFood DB: No migrations needed.")
 
 
 if __name__ == "__main__":
     migrate_health_db()
+    migrate_food_db()
