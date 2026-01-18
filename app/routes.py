@@ -294,6 +294,7 @@ def add_weight():
     existing = WeightEntry.query.filter_by(date=entry_date).first()
     if existing:
         existing.weight_kg = weight_kg
+        existing.created_at = datetime.utcnow()  # Update timestamp for auto-refresh
     else:
         entry = WeightEntry(date=entry_date, weight_kg=weight_kg)
         db.session.add(entry)
@@ -313,6 +314,7 @@ def add_sleep():
     existing = SleepEntry.query.filter_by(date=entry_date).first()
     if existing:
         existing.hours = hours
+        existing.created_at = datetime.utcnow()  # Update timestamp for auto-refresh
     else:
         entry = SleepEntry(date=entry_date, hours=hours)
         db.session.add(entry)
@@ -332,6 +334,7 @@ def add_wake_time():
     existing = WakeTimeEntry.query.filter_by(date=entry_date).first()
     if existing:
         existing.wake_time = wake_time
+        existing.created_at = datetime.utcnow()  # Update timestamp for auto-refresh
     else:
         entry = WakeTimeEntry(date=entry_date, wake_time=wake_time)
         db.session.add(entry)
@@ -797,6 +800,7 @@ def add_metric_entry(metric_id):
     if existing:
         existing.value = value
         existing.notes = data.get("notes", existing.notes)
+        existing.created_at = datetime.utcnow()  # Update timestamp for auto-refresh
     else:
         entry = CustomMetricEntry(
             metric_id=metric_id,

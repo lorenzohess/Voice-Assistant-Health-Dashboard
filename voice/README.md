@@ -56,34 +56,34 @@ Log food by quantity (requires food in database):
 ### Weight
 
 - "My weight is 75 kilos"
-- "Weight 165 pounds"
 - "I weigh 70 kg"
-- "Weighed 150 lbs"
+- Has issues: "Weight 165 pounds"
+- Has issues: "Weighed 150 lbs"
 
 ### Sleep
 
 Simple hours:
 - "I slept 8 hours"
-- "Slept 7 hours"
 - "Got 6 hours of sleep"
+- Issues: "Slept 7 hours"
 
 With fractions:
 - "I slept 7 and a half hours"
-- "Slept 8 and a quarter hours"
 - "I slept 6 and three quarter hours"
 - "Got 7.5 hours of sleep"
+- Issues: "Slept 8 and a quarter hours"
 
 ### Wake Time
 
 With numbers:
 - "I woke up at 7 AM"
 - "Woke up at 7:30 AM"
-- "I woke at 8 PM"
+- Issues: "I woke at 8 PM"
 
 With words:
 - "I woke up at seven thirty AM"
 - "Woke up at eight fifteen AM"
-- "I woke at six forty-five"
+- Issues: "I woke at six forty-five"
 
 ### Workouts
 
@@ -97,7 +97,7 @@ With words:
 
 - "Vegetables 3 servings"
 - "Vegetables, 5 servings"
-- "Vegetables 2"
+- Issues with 2 -> too: "Vegetables 2"
 
 ### Custom Metrics
 
@@ -107,6 +107,8 @@ Any custom metric with a `voice_keyword` set can be logged:
 Example: If you create a metric with voice_keyword "medication":
 - "Medication 2"
 - "Medication 1"
+
+It helps the STT if you suffix the number "two" with a unit, like "dose", "pieces", "slices", "kilograms" (I've found most success with these units). This avoids misinterpretation as "too" or "to".
 
 ## Environment Variables
 
