@@ -26,63 +26,71 @@ from .config import (
 )
 
 
-def find_working_input_device(target_rate=16000):
+def find_working_input_device(target_rate=16000, max_retries=5, retry_delay=2):
     """Find an input device that supports the target sample rate."""
-    devices = sd.query_devices()
+    import time
     
-    # Try specified device first
-    if AUDIO_INPUT_DEVICE is not None:
+    for attempt in range(max_retries):
         try:
-            device_info = sd.query_devices(AUDIO_INPUT_DEVICE, 'input')
-            # Test if it works
-            sd.check_input_settings(
-                device=AUDIO_INPUT_DEVICE,
-                channels=1,
-                dtype='int16',
-                samplerate=target_rate
-            )
-            if DEBUG:
-                print(f"[Audio] Using specified device {AUDIO_INPUT_DEVICE}: {device_info['name']}")
-            return AUDIO_INPUT_DEVICE
+            devices = sd.query_devices()
         except Exception as e:
-            if DEBUG:
-                print(f"[Audio] Specified device {AUDIO_INPUT_DEVICE} failed: {e}")
-    
-    # Try default device
-    try:
-        default_input = sd.default.device[0]
-        if default_input is not None:
-            sd.check_input_settings(
-                device=default_input,
-                channels=1,
-                dtype='int16',
-                samplerate=target_rate
-            )
-            device_info = sd.query_devices(default_input, 'input')
-            if DEBUG:
-                print(f"[Audio] Using default device {default_input}: {device_info['name']}")
-            return default_input
-    except Exception as e:
-        if DEBUG:
-            print(f"[Audio] Default device failed: {e}")
-    
-    # Search for any working input device
-    for i, device in enumerate(devices):
-        if device['max_input_channels'] > 0:
+            print(f"[Audio] Attempt {attempt+1}: Failed to query devices: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+            raise
+        
+        # If device is explicitly specified, trust it (skip validation)
+        if AUDIO_INPUT_DEVICE is not None:
             try:
+                device_info = sd.query_devices(AUDIO_INPUT_DEVICE, 'input')
+                print(f"[Audio] Using specified device {AUDIO_INPUT_DEVICE}: {device_info['name']}")
+                return AUDIO_INPUT_DEVICE
+            except Exception as e:
+                print(f"[Audio] Attempt {attempt+1}: Specified device {AUDIO_INPUT_DEVICE} not found: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+                raise RuntimeError(f"Specified audio device {AUDIO_INPUT_DEVICE} not found")
+        
+        # Try default device
+        try:
+            default_input = sd.default.device[0]
+            if default_input is not None:
                 sd.check_input_settings(
-                    device=i,
+                    device=default_input,
                     channels=1,
                     dtype='int16',
                     samplerate=target_rate
                 )
-                if DEBUG:
+                device_info = sd.query_devices(default_input, 'input')
+                print(f"[Audio] Using default device {default_input}: {device_info['name']}")
+                return default_input
+        except Exception as e:
+            if DEBUG:
+                print(f"[Audio] Default device failed: {e}")
+        
+        # Search for any working input device
+        for i, device in enumerate(devices):
+            if device['max_input_channels'] > 0:
+                try:
+                    sd.check_input_settings(
+                        device=i,
+                        channels=1,
+                        dtype='int16',
+                        samplerate=target_rate
+                    )
                     print(f"[Audio] Found working device {i}: {device['name']}")
-                return i
-            except Exception:
-                continue
+                    return i
+                except Exception:
+                    continue
+        
+        # No device found this attempt, retry
+        if attempt < max_retries - 1:
+            print(f"[Audio] Attempt {attempt+1}: No suitable device found, retrying in {retry_delay}s...")
+            time.sleep(retry_delay)
     
-    raise RuntimeError(f"No audio input device found that supports {target_rate}Hz")
+    raise RuntimeError(f"No audio input device found that supports {target_rate}Hz after {max_retries} attempts")
 
 
 class VoiceListener:
