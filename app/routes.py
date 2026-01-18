@@ -715,6 +715,7 @@ def create_custom_metric():
         unit=data.get("unit", "units"),
         chart_type=data.get("chart_type", "bar"),
         color=data.get("color", "#6366f1"),
+        voice_keyword=data.get("voice_keyword"),  # Optional voice trigger word
     )
     db.session.add(metric)
     db.session.commit()

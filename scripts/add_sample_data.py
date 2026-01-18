@@ -182,7 +182,8 @@ def add_sample_data():
             name="Vegetable Servings",
             unit="servings",
             chart_type="bar",
-            color="#10b981"  # Green
+            color="#10b981",  # Green
+            voice_keyword="vegetables"
         )
         db.session.add(veggie_metric)
         db.session.commit()

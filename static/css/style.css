@@ -406,6 +406,14 @@ html, body {
     min-height: 60px;
 }
 
+.form-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+    opacity: 0.8;
+}
+
 /* Form button full width */
 form .btn {
     width: 100%;

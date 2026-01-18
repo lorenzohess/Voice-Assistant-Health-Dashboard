@@ -303,6 +303,34 @@ def cmd_log_workout(params: dict) -> CommandResult:
         return CommandResult(False, "An error occurred while logging workout.")
 
 
+def cmd_log_custom_metric(params: dict) -> CommandResult:
+    """Log a value to a custom metric."""
+    metric_id = params.get("metric_id")
+    metric_name = params.get("metric_name", "metric")
+    value = params.get("value")
+    
+    if not metric_id or value is None:
+        return CommandResult(False, "Missing metric or value.")
+    
+    try:
+        response = _api_post(f"/api/custom-metrics/{metric_id}/entries", {
+            "date": date.today().isoformat(),
+            "value": value,
+        })
+        
+        if response.status_code == 200:
+            return CommandResult(True, f"Logged {value} for {metric_name}.", response.json())
+        else:
+            return CommandResult(False, f"Failed to log {metric_name}.")
+            
+    except requests.exceptions.ConnectionError:
+        return CommandResult(False, "Cannot connect to dashboard server.")
+    except Exception as e:
+        if DEBUG:
+            print(f"[Commands] Error: {e}")
+        return CommandResult(False, f"An error occurred while logging {metric_name}.")
+
+
 # Map intent names to handler functions
 COMMAND_HANDLERS = {
     "add_calories": cmd_add_calories,
@@ -312,6 +340,7 @@ COMMAND_HANDLERS = {
     "log_wake": cmd_log_wake,
     "log_vegetables": cmd_log_vegetables,
     "log_workout": cmd_log_workout,
+    "log_custom_metric": cmd_log_custom_metric,
 }
 
 

@@ -7,7 +7,83 @@ from typing import Optional, Any
 
 import requests
 
-from .config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_ENABLED, DEBUG
+import requests as req
+
+from .config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_ENABLED, API_BASE_URL, DEBUG
+
+
+# Cache for custom metric patterns (loaded from API)
+_custom_metric_patterns = []
+_patterns_loaded = False
+
+
+def load_custom_metric_patterns():
+    """Load custom metrics with voice keywords from the API."""
+    global _custom_metric_patterns, _patterns_loaded
+    
+    try:
+        response = req.get(f"{API_BASE_URL}/api/custom-metrics", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            metrics = data.get("metrics", [])
+            
+            _custom_metric_patterns = []
+            for m in metrics:
+                keyword = m.get("voice_keyword")
+                if keyword:
+                    # Create pattern: keyword followed by number
+                    # e.g., "medication 2" or "medication, 2"
+                    pattern = rf"{re.escape(keyword.lower())}\s*,?\s*(\d+(?:\.\d+)?)"
+                    _custom_metric_patterns.append({
+                        "id": m["id"],
+                        "name": m["name"],
+                        "keyword": keyword,
+                        "pattern": pattern,
+                    })
+            
+            _patterns_loaded = True
+            if DEBUG:
+                print(f"[Intent] Loaded {len(_custom_metric_patterns)} custom metric patterns")
+    except Exception as e:
+        if DEBUG:
+            print(f"[Intent] Failed to load custom metric patterns: {e}")
+
+
+def parse_custom_metrics(text: str) -> Optional[ParsedIntent]:
+    """Check text against custom metric voice patterns."""
+    global _patterns_loaded
+    
+    # Load patterns if not already loaded
+    if not _patterns_loaded:
+        load_custom_metric_patterns()
+    
+    text_lower = text.lower()
+    
+    for metric in _custom_metric_patterns:
+        match = re.search(metric["pattern"], text_lower)
+        if match:
+            value = float(match.group(1))
+            if DEBUG:
+                print(f"[Intent] Custom metric match: {metric['name']} -> {value}")
+            return ParsedIntent(
+                intent="log_custom_metric",
+                params={
+                    "metric_id": metric["id"],
+                    "metric_name": metric["name"],
+                    "value": value,
+                },
+                raw_text=text,
+                confidence=1.0,
+            )
+    
+    return None
+
+
+def reload_custom_patterns():
+    """Force reload of custom metric patterns."""
+    global _patterns_loaded
+    _patterns_loaded = False
+    load_custom_metric_patterns()
 
 
 @dataclass
@@ -370,7 +446,7 @@ def parse_with_regex(text: str) -> Optional[ParsedIntent]:
 
 
 # Valid intent names that Ollama can return
-VALID_INTENTS = {"add_calories", "add_food", "log_weight", "log_sleep", "log_wake", "log_vegetables", "log_workout"}
+VALID_INTENTS = {"add_calories", "add_food", "log_weight", "log_sleep", "log_wake", "log_vegetables", "log_workout", "log_custom_metric"}
 
 
 def parse_with_ollama(text: str) -> Optional[ParsedIntent]:
@@ -448,12 +524,17 @@ JSON:"""
 def parse_intent(text: str) -> Optional[ParsedIntent]:
     """
     Parse user speech into structured intent.
-    Tries regex first, optionally falls back to Ollama.
+    Checks custom metrics first, then regex, optionally Ollama.
     """
     if not text or not text.strip():
         return None
     
-    # Try regex first (fast)
+    # Check custom metric patterns first (user-defined)
+    result = parse_custom_metrics(text)
+    if result:
+        return result
+    
+    # Try regex patterns (built-in)
     result = parse_with_regex(text)
     if result:
         return result

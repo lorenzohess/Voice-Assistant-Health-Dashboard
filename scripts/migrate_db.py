@@ -80,6 +80,13 @@ def migrate_health_db():
         if add_column_if_missing(cursor, "meal_presets", "food_id", "INTEGER"):
             changes += 1
     
+    # Check if custom_metrics table exists and needs updates
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='custom_metrics'")
+    if cursor.fetchone():
+        # Add voice_keyword column
+        if add_column_if_missing(cursor, "custom_metrics", "voice_keyword", "TEXT"):
+            changes += 1
+    
     conn.commit()
     conn.close()
     

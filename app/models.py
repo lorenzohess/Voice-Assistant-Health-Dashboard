@@ -156,6 +156,7 @@ class CustomMetric(db.Model):
     unit = db.Column(db.String(50), nullable=False)  # e.g., "servings", "glasses", "minutes"
     chart_type = db.Column(db.String(20), default="bar")  # "bar" or "line"
     color = db.Column(db.String(20), default="#6366f1")  # hex color
+    voice_keyword = db.Column(db.String(50), nullable=True)  # Voice trigger word, e.g., "medication"
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship to entries
@@ -171,6 +172,7 @@ class CustomMetric(db.Model):
             "unit": self.unit,
             "chart_type": self.chart_type,
             "color": self.color,
+            "voice_keyword": self.voice_keyword,
         }
 
 
