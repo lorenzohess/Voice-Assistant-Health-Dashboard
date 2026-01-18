@@ -34,20 +34,14 @@
             <button class="btn btn-primary btn-sm" onclick="openModal('weightModal')">+ Add</button>
         </div>
         <div class="chart-container" id="weightChart"></div>
-        <div class="metrics-box">
-            <div class="metric">
-                <span class="metric-label">Latest</span>
-                <span class="metric-value">{{ weight_metrics.latest or 'N/A' }}{% if weight_metrics.latest %} kg{% endif %}</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Average</span>
-                <span class="metric-value">{{ weight_metrics.average or 'N/A' }}{% if weight_metrics.average %} kg{% endif %}</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Median</span>
-                <span class="metric-value">{{ weight_metrics.median or 'N/A' }}{% if weight_metrics.median %} kg{% endif %}</span>
-            </div>
+        <div class="metrics-row">
+            <span class="metric-inline"><b>{{ weight_metrics.latest or 'N/A' }}</b>{% if weight_metrics.latest %} lbs{% endif %}</span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">avg {{ weight_metrics.average or 'N/A' }}</span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">med {{ weight_metrics.median or 'N/A' }}</span>
         </div>
+        <div class="voice-hint">"I weigh N lbs"</div>
     </div>
     
     <!-- Sleep Card -->
@@ -57,20 +51,14 @@
             <button class="btn btn-primary btn-sm" onclick="openModal('sleepModal')">+ Add</button>
         </div>
         <div class="chart-container" id="sleepChart"></div>
-        <div class="metrics-box">
-            <div class="metric">
-                <span class="metric-label">Latest</span>
-                <span class="metric-value">{{ sleep_metrics.latest or 'N/A' }}{% if sleep_metrics.latest %} hrs{% endif %}</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Average</span>
-                <span class="metric-value">{{ sleep_metrics.average or 'N/A' }}{% if sleep_metrics.average %} hrs{% endif %}</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Median</span>
-                <span class="metric-value">{{ sleep_metrics.median or 'N/A' }}{% if sleep_metrics.median %} hrs{% endif %}</span>
-            </div>
+        <div class="metrics-row">
+            <span class="metric-inline"><b>{{ sleep_metrics.latest or 'N/A' }}</b>{% if sleep_metrics.latest %} hrs{% endif %}</span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">avg {{ sleep_metrics.average or 'N/A' }}</span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">med {{ sleep_metrics.median or 'N/A' }}</span>
         </div>
+        <div class="voice-hint">"I slept N hours"</div>
     </div>
     
     <!-- Wake Time Card -->
@@ -80,16 +68,12 @@
             <button class="btn btn-primary btn-sm" onclick="openModal('wakeModal')">+ Add</button>
         </div>
         <div class="chart-container" id="wakeChart"></div>
-        <div class="metrics-box">
-            <div class="metric">
-                <span class="metric-label">Latest</span>
-                <span class="metric-value">{{ wake_metrics.latest_formatted }}</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Entries</span>
-                <span class="metric-value">{{ wake_metrics.count }}</span>
-            </div>
+        <div class="metrics-row">
+            <span class="metric-inline"><b>{{ wake_metrics.latest_formatted }}</b></span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">{{ wake_metrics.count }} entries</span>
         </div>
+        <div class="voice-hint">"I woke up at N AM"</div>
     </div>
     
     <!-- Workout Card -->
@@ -99,16 +83,12 @@
             <button class="btn btn-primary btn-sm" onclick="openModal('workoutModal')">+ Add</button>
         </div>
         <div class="chart-container" id="workoutChart"></div>
-        <div class="metrics-box">
-            <div class="metric">
-                <span class="metric-label">Total</span>
-                <span class="metric-value">{{ workout_metrics.total }}</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Days Active</span>
-                <span class="metric-value">{{ workout_metrics.days_with_workout }}</span>
-            </div>
+        <div class="metrics-row">
+            <span class="metric-inline"><b>{{ workout_metrics.total }}</b> total</span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">{{ workout_metrics.days_with_workout }} days active</span>
         </div>
+        <div class="voice-hint">"I worked out for N minutes"</div>
     </div>
     
     <!-- Calories Card -->
@@ -121,20 +101,14 @@
             </div>
         </div>
         <div class="chart-container" id="calorieChart"></div>
-        <div class="metrics-box">
-            <div class="metric">
-                <span class="metric-label">Today</span>
-                <span class="metric-value {% if today_calories > 2500 %}warning{% endif %}">{{ today_calories|int }} kcal</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Average</span>
-                <span class="metric-value">{{ calorie_metrics.average or 'N/A' }}{% if calorie_metrics.average %} kcal{% endif %}</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Foods DB</span>
-                <span class="metric-value">{{ food_count }}</span>
-            </div>
+        <div class="metrics-row">
+            <span class="metric-inline {% if today_calories > 2500 %}warning{% endif %}"><b>{{ today_calories|int }}</b> kcal</span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">avg {{ calorie_metrics.average or 'N/A' }}</span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">{{ food_count }} foods</span>
         </div>
+        <div class="voice-hint">"Add N calories"</div>
         
         {# Today's Meals - commented out for now
         {% if today_entries %}
@@ -188,19 +162,15 @@
         </div>
         <div class="chart" id="custom-chart-{{ cm.id }}"></div>
         <div class="metrics-row">
-            <div class="metric">
-                <span class="metric-value">{{ "%.1f"|format(cm.metrics.latest) if cm.metrics.latest is not none else "—" }}</span>
-                <span class="metric-label">Latest ({{ cm.unit }})</span>
-            </div>
-            <div class="metric">
-                <span class="metric-value">{{ "%.1f"|format(cm.metrics.average) if cm.metrics.average is not none else "—" }}</span>
-                <span class="metric-label">Avg</span>
-            </div>
-            <div class="metric">
-                <span class="metric-value">{{ cm.metrics.count }}</span>
-                <span class="metric-label">Entries</span>
-            </div>
+            <span class="metric-inline"><b>{{ "%.1f"|format(cm.metrics.latest) if cm.metrics.latest is not none else "—" }}</b> {{ cm.unit }}</span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">avg {{ "%.1f"|format(cm.metrics.average) if cm.metrics.average is not none else "—" }}</span>
+            <span class="metric-sep">·</span>
+            <span class="metric-inline">{{ cm.metrics.count }} entries</span>
         </div>
+        {% if cm.voice_keyword %}
+        <div class="voice-hint">"{{ cm.voice_keyword|capitalize }} N {{ cm.unit }}"</div>
+        {% endif %}
     </div>
     {% endfor %}
 

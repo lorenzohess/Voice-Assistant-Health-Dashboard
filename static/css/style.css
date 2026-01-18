@@ -629,6 +629,47 @@ html, body {
     font-family: var(--font-mono);
 }
 
+/* Compact metrics row (single line) */
+.metrics-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+
+.metric-inline {
+    white-space: nowrap;
+}
+
+.metric-inline b {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.metric-inline.warning,
+.metric-inline.warning b {
+    color: var(--accent-orange);
+}
+
+.metric-sep {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+/* Voice command hint */
+.voice-hint {
+    margin-top: 0.4rem;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-style: italic;
+    opacity: 0.7;
+}
+
 /* Buttons */
 .btn {
     display: inline-flex;
