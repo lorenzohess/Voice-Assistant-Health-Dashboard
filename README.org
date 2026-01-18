@@ -14,6 +14,8 @@ This project was implemented to meet my needs because I am the primary user. Thu
 If you wish to use this project, I strongly encourage you review the code (or get an LLM to help) to ensure it meets your needs (optimization, security, features, etc). My intention in publishing this project was more to document that I spent time on it rather than to provide a deployable solution for others. I'm happy to help you modify it and accept pull requests, but I just don't have the time to single-handedly polish, verify, and validate the entire project, much less continue development.
 
 This README is quite lengthy because it serves as the project documentation.
+
+[[file:dashboard-example.jpg]] 
 ** Features
 - *Web Dashboard*: real-time graphs for weight, sleep, wake time, workouts, calories, and custom metrics
 - *Voice Assistant*: hands-free data entry using wake word detection ("Hey Jarvis")
