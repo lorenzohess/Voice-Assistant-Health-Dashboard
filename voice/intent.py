@@ -1,5 +1,7 @@
 """Intent parsing using regex patterns with Ollama fallback."""
 
+from __future__ import annotations
+
 import re
 import json
 from dataclasses import dataclass
