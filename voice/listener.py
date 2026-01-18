@@ -351,8 +351,9 @@ class VoiceListener:
                 duration = len(audio_float) / self.sample_rate
                 print(f"[Listener] Transcribing {duration:.1f}s of audio with Moonshine...")
             
-            # Transcribe with Moonshine
-            text = self.moonshine_model.generate(audio_float)
+            # Transcribe with Moonshine (expects 2D: batch x samples)
+            audio_batch = audio_float[np.newaxis, :]
+            text = self.moonshine_model.generate(audio_batch)
             
             # Handle if result is a list
             if isinstance(text, list):

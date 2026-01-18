@@ -55,7 +55,7 @@ API_BASE_URL = os.environ.get("HEALTH_API_URL", "http://localhost:5000")
 
 # Voice activity detection
 VAD_SILENCE_THRESHOLD = 1.5  # seconds of silence to stop recording
-MAX_RECORDING_TIME = 10  # max seconds to record after wake word
+MAX_RECORDING_TIME = 4  # max seconds to record after wake word
 
 # Debug settings
 DEBUG = os.environ.get("VOICE_DEBUG", "0") == "1"
