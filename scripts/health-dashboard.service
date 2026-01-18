@@ -1,0 +1,22 @@
+[Unit]
+Description=Health Dashboard Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=pi2
+Group=pi2
+WorkingDirectory=/home/pi2/health-dashboard
+ExecStart=/home/pi2/health-dashboard/venv/bin/python run.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=FLASK_ENV=production
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=health-dashboard
+
+[Install]
+WantedBy=multi-user.target
