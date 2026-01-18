@@ -27,7 +27,11 @@ requests>=2.31.0
 # For CSV export
 # (csv is built-in, no extra package needed)
 
-vosk==0.3.45
+# Speech-to-Text options
+vosk==0.3.45  # Fast, less accurate
+faster-whisper>=1.0.0  # Slower, more accurate (optional)
+
+# Audio processing
 pyaudio==0.2.14
 openwakeword==0.6.0
 piper-tts==1.2.0

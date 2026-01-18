@@ -21,8 +21,19 @@ WAKE_WORD_MODEL = "hey_jarvis"
 WAKE_WORD_THRESHOLD = 0.7  # Confidence threshold (0-1), higher = fewer false positives
 WAKE_WORD_REFRACTORY = 2.0  # Seconds to wait after detection before listening again
 
-# Vosk STT settings
+# Speech-to-Text settings
+# STT_ENGINE: "vosk" (fast, less accurate) or "whisper" (slower, more accurate)
+STT_ENGINE = os.environ.get("STT_ENGINE", "vosk")
+
+# Vosk settings
 VOSK_MODEL_PATH = str(MODELS_DIR / "vosk-model")
+
+# Whisper settings (faster-whisper)
+# Model sizes: tiny, base, small, medium, large
+# For Raspberry Pi, use "tiny" or "base"
+WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
+WHISPER_DEVICE = "cpu"  # Use "cuda" if you have NVIDIA GPU
+WHISPER_COMPUTE_TYPE = "int8"  # Use "int8" for CPU, "float16" for GPU
 
 # Piper TTS settings
 PIPER_MODEL_PATH = str(MODELS_DIR / "piper" / "en_US-bryce-medium.onnx")

@@ -4,7 +4,6 @@ import json
 import time
 import numpy as np
 import sounddevice as sd
-from vosk import Model, KaldiRecognizer
 from openwakeword.model import Model as WakeWordModel
 
 from .config import (
@@ -15,7 +14,11 @@ from .config import (
     WAKE_WORD_MODEL,
     WAKE_WORD_THRESHOLD,
     WAKE_WORD_REFRACTORY,
+    STT_ENGINE,
     VOSK_MODEL_PATH,
+    WHISPER_MODEL_SIZE,
+    WHISPER_DEVICE,
+    WHISPER_COMPUTE_TYPE,
     VAD_SILENCE_THRESHOLD,
     MAX_RECORDING_TIME,
     DEBUG,
@@ -29,18 +32,33 @@ class VoiceListener:
         self.sample_rate = SAMPLE_RATE
         self.chunk_size = CHUNK_SIZE
         self.last_wake_time = 0  # For refractory period
+        self.stt_engine = STT_ENGINE.lower()
         
-        # Load models
+        # Load wake word model
         if DEBUG:
             print("[Listener] Loading wake word model...")
         self.wake_model = WakeWordModel(wakeword_models=[WAKE_WORD_MODEL])
         
-        if DEBUG:
-            print("[Listener] Loading Vosk model...")
-        self.vosk_model = Model(VOSK_MODEL_PATH)
+        # Load STT model based on config
+        if self.stt_engine == "whisper":
+            if DEBUG:
+                print(f"[Listener] Loading Whisper model ({WHISPER_MODEL_SIZE})...")
+            from faster_whisper import WhisperModel
+            self.whisper_model = WhisperModel(
+                WHISPER_MODEL_SIZE,
+                device=WHISPER_DEVICE,
+                compute_type=WHISPER_COMPUTE_TYPE,
+            )
+            self.vosk_model = None
+        else:
+            if DEBUG:
+                print("[Listener] Loading Vosk model...")
+            from vosk import Model
+            self.vosk_model = Model(VOSK_MODEL_PATH)
+            self.whisper_model = None
         
         if DEBUG:
-            print("[Listener] Models loaded.")
+            print(f"[Listener] Models loaded. STT engine: {self.stt_engine}")
     
     def _audio_callback(self, indata, frames, time_info, status):
         """Callback for audio stream."""
@@ -116,12 +134,19 @@ class VoiceListener:
         Record audio until silence, then transcribe.
         Returns transcribed text or empty string on error.
         """
+        if self.stt_engine == "whisper":
+            return self._transcribe_whisper()
+        else:
+            return self._transcribe_vosk()
+    
+    def _transcribe_vosk(self) -> str:
+        """Transcribe using Vosk (streaming, faster but less accurate)."""
         if DEBUG:
-            print("[Listener] Listening for speech...")
+            print("[Listener] Listening for speech (Vosk)...")
         
+        from vosk import KaldiRecognizer
         recognizer = KaldiRecognizer(self.vosk_model, self.sample_rate)
         
-        audio_chunks = []
         silence_start = None
         recording_start = time.time()
         
@@ -176,7 +201,88 @@ class VoiceListener:
             return ""
         except Exception as e:
             if DEBUG:
-                print(f"[Listener] Error in transcription: {e}")
+                print(f"[Listener] Error in Vosk transcription: {e}")
+            return ""
+    
+    def _transcribe_whisper(self) -> str:
+        """Transcribe using Whisper (batch, slower but more accurate)."""
+        if DEBUG:
+            print("[Listener] Listening for speech (Whisper)...")
+        
+        audio_chunks = []
+        silence_start = None
+        recording_start = time.time()
+        has_speech = False
+        
+        try:
+            with sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=CHANNELS,
+                dtype='int16',
+                blocksize=self.chunk_size,
+                device=AUDIO_INPUT_DEVICE,
+            ) as stream:
+                while True:
+                    audio_data, _ = stream.read(self.chunk_size)
+                    audio_chunks.append(audio_data.flatten())
+                    
+                    # Check for silence (simple energy-based VAD)
+                    energy = np.abs(audio_data).mean()
+                    is_silent = energy < 500
+                    
+                    if not is_silent:
+                        has_speech = True
+                        silence_start = None
+                    elif has_speech:
+                        # Only start silence timer after we've heard speech
+                        if silence_start is None:
+                            silence_start = time.time()
+                        elif time.time() - silence_start > VAD_SILENCE_THRESHOLD:
+                            # Long silence after speech - stop recording
+                            break
+                    
+                    # Max recording time
+                    if time.time() - recording_start > MAX_RECORDING_TIME:
+                        if DEBUG:
+                            print("[Listener] Max recording time reached")
+                        break
+            
+            if not audio_chunks or not has_speech:
+                if DEBUG:
+                    print("[Listener] No speech detected")
+                return ""
+            
+            # Concatenate and convert to float32 for Whisper
+            audio_array = np.concatenate(audio_chunks)
+            audio_float = audio_array.astype(np.float32) / 32768.0
+            
+            if DEBUG:
+                duration = len(audio_float) / self.sample_rate
+                print(f"[Listener] Transcribing {duration:.1f}s of audio...")
+            
+            # Transcribe with Whisper
+            segments, info = self.whisper_model.transcribe(
+                audio_float,
+                language="en",
+                beam_size=1,  # Faster
+                vad_filter=True,  # Filter out non-speech
+            )
+            
+            # Combine all segments
+            text = " ".join(segment.text.strip() for segment in segments).strip()
+            
+            if DEBUG:
+                print(f"[Listener] Transcribed: {text}")
+            
+            return text
+            
+        except KeyboardInterrupt:
+            return ""
+        except Exception as e:
+            if DEBUG:
+                print(f"[Listener] Error in Whisper transcription: {e}")
+                import traceback
+                traceback.print_exc()
             return ""
     
     def listen_once(self, skip_wake_word: bool = False) -> str:
@@ -298,7 +404,7 @@ if __name__ == "__main__":
             print("  - Try speaking louder or closer to the mic")
             
     elif "--test-stt" in sys.argv:
-        print("Testing speech-to-text. Speak now...")
+        print(f"Testing speech-to-text with {STT_ENGINE}. Speak now...")
         listener = VoiceListener()
         text = listener.listen_and_transcribe()
         print(f"Transcribed: '{text}'")
@@ -308,3 +414,11 @@ if __name__ == "__main__":
         print("  python -m voice.listener --test-mic   # Test microphone levels")
         print("  python -m voice.listener --test-wake  # Test wake word detection")
         print("  python -m voice.listener --test-stt   # Test speech-to-text")
+        print()
+        print("Environment variables:")
+        print(f"  STT_ENGINE={STT_ENGINE} (vosk or whisper)")
+        print(f"  WHISPER_MODEL={WHISPER_MODEL_SIZE} (tiny, base, small, medium)")
+        print()
+        print("Examples:")
+        print("  STT_ENGINE=whisper python -m voice.listener --test-stt")
+        print("  STT_ENGINE=whisper WHISPER_MODEL=tiny python -m voice.main --debug")
