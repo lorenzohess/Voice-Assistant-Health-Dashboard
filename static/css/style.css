@@ -369,12 +369,12 @@ html, body {
 .volume-controls {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    overflow: hidden;
+    gap: 0.35rem;
 }
 
 .volume-slider {
     flex: 1;
+    min-width: 0;
     height: 8px;
     border-radius: 4px;
     background: var(--bg-secondary);

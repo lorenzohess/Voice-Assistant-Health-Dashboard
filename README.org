@@ -147,9 +147,6 @@ python -c "from openwakeword.model import Model; Model(wakeword_models=['hey_jar
 #+BEGIN_SRC bash
 source venv/bin/activate
 python -c "from app import create_app, db; app = create_app(); app.app_context().push(); db.create_all()"
-
-# Optional: Add sample data
-python scripts/add_sample_data.py
 #+END_SRC
 *** 4. Install Systemd Services
 #+BEGIN_SRC bash
@@ -323,6 +320,28 @@ When modifying models, run:
 #+BEGIN_SRC bash
 python scripts/migrate_db.py
 #+END_SRC
+** Sample Data
+*** Adding Sample Data
+Populate the database with sample entries for testing/demo:
+#+BEGIN_SRC bash
+source venv/bin/activate
+python scripts/add_sample_data.py
+#+END_SRC
+This creates 30 days of randomized data for all metrics plus a "Vegetable Servings" custom metric.
+*** Removing Sample Data
+Clear all health data entries (keeps custom metric definitions):
+#+BEGIN_SRC bash
+source venv/bin/activate
+
+# With confirmation prompt
+python scripts/clear_data.py
+
+# Skip confirmation
+python scripts/clear_data.py -y
+
+# Also delete meal presets
+python scripts/clear_data.py -y --include-presets
+#+END_SRC
 ** STT Engine Selection
 Set in =voice/config.py= or environment:
 #+BEGIN_SRC bash
@@ -335,6 +354,7 @@ STT_ENGINE=whisper python -m voice.main
 # Moonshine (fast AND accurate, recommended)
 STT_ENGINE=moonshine python -m voice.main
 #+END_SRC
+** Sample Data
 * Deployment
 ** Systemd Services
 | Service          | Type   | Description                |
