@@ -132,7 +132,7 @@ def parse_time_words(text: str) -> tuple:
 def preprocess_text(text: str) -> str:
     """Preprocess text to normalize number words to digits.
     
-    Handles time expressions specially to avoid "seven thirty" -> "37".
+    Handles special cases to avoid incorrect conversions.
     """
     result = text.lower()
     
@@ -141,7 +141,20 @@ def preprocess_text(text: str) -> str:
     if re.search(r'woke|wake', result):
         return result
     
-    # Common patterns with word numbers
+    # Handle sleep fractions BEFORE general number conversion
+    # "eight and a half" -> "8.5", "seven and three quarters" -> "7.75"
+    result = re.sub(r'\b(\w+)\s+and\s+a\s+half\b', 
+                    lambda m: str(float(words_to_number(m.group(1)) or 0) + 0.5) if words_to_number(m.group(1)) else m.group(0), 
+                    result)
+    result = re.sub(r'\b(\w+)\s+and\s+a\s+quarter\b', 
+                    lambda m: str(float(words_to_number(m.group(1)) or 0) + 0.25) if words_to_number(m.group(1)) else m.group(0), 
+                    result)
+    result = re.sub(r'\b(\w+)\s+and\s+three\s+quarters?\b', 
+                    lambda m: str(float(words_to_number(m.group(1)) or 0) + 0.75) if words_to_number(m.group(1)) else m.group(0), 
+                    result)
+    
+    # General word-to-number conversion (but NOT for fraction words already handled)
+    # Only convert standalone numbers, not parts of "and a half" etc.
     patterns = [
         # "five hundred calories" -> "500 calories"
         (r'\b((?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)(?:\s+(?:and\s+)?(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand))*)\b',
@@ -194,7 +207,16 @@ PATTERNS = [
         lambda m: {"food": m.group(1).strip(), "calories": int(m.group(2))}
     ),
     
+    # Vegetables - MUST come before add_food pattern!
+    # Matches: "add 6 servings of vegetables", "had 3 vegetables"
+    (
+        r"(?:add(?:ed)?|log(?:ged)?|ate|had|that)\s+(\d+)\s*(?:servings?\s+)?(?:of\s+)?vegetables?",
+        "log_vegetables",
+        lambda m: {"servings": int(m.group(1))}
+    ),
+    
     # Calories - food lookup (will need API to compute)
+    # This pattern is greedy, so specific patterns (like vegetables) must come first
     (
         r"(?:add(?:ed)?|log(?:ged)?|ate|had)\s+(\d+(?:\.\d+)?)\s*(g|oz|cup|cups|piece|pieces|serving|servings)?\s*(?:of\s+)?(.+?)(?:\s+to\s+calories)?$",
         "add_food",
@@ -247,14 +269,6 @@ PATTERNS = [
         r"(?:got\s+)?(\d+(?:\.\d+)?)\s*(?:hours?\s+)?(?:of\s+)?sleep",
         "log_sleep",
         lambda m: {"hours": float(m.group(1))}
-    ),
-    
-    # Vegetables - MUST come before add_food pattern!
-    # Matches: "add", "had", "that" (common Vosk mishearing of "add")
-    (
-        r"(?:add(?:ed)?|log(?:ged)?|ate|had|that)\s+(\d+)\s*(?:servings?\s+)?(?:of\s+)?vegetable",
-        "log_vegetables",
-        lambda m: {"servings": int(m.group(1))}
     ),
     
     # Wake time - digit format: "7 am", "7:30 am", "7 30 am"
