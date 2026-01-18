@@ -14,6 +14,7 @@ from .config import (
     AUDIO_INPUT_DEVICE,
     WAKE_WORD_MODEL,
     WAKE_WORD_THRESHOLD,
+    WAKE_WORD_REFRACTORY,
     VOSK_MODEL_PATH,
     VAD_SILENCE_THRESHOLD,
     MAX_RECORDING_TIME,
@@ -27,6 +28,7 @@ class VoiceListener:
     def __init__(self):
         self.sample_rate = SAMPLE_RATE
         self.chunk_size = CHUNK_SIZE
+        self.last_wake_time = 0  # For refractory period
         
         # Load models
         if DEBUG:
@@ -51,9 +53,19 @@ class VoiceListener:
         Listen for wake word. Blocks until detected.
         Returns True if wake word detected, False on error.
         """
+        # Enforce refractory period
+        time_since_last = time.time() - self.last_wake_time
+        if time_since_last < WAKE_WORD_REFRACTORY:
+            wait_time = WAKE_WORD_REFRACTORY - time_since_last
+            if DEBUG:
+                print(f"[Listener] Refractory period, waiting {wait_time:.1f}s...")
+            time.sleep(wait_time)
+        
+        # Reset the model's internal state to avoid lingering high scores
+        self.wake_model.reset()
+        
         if DEBUG:
-            print(f"[Listener] Listening for wake word '{WAKE_WORD_MODEL}'...")
-            print(f"[Listener] Available models: {list(self.wake_model.models.keys())}")
+            print(f"[Listener] Listening for wake word '{WAKE_WORD_MODEL}' (threshold: {WAKE_WORD_THRESHOLD})...")
         
         frame_count = 0
         
@@ -87,6 +99,7 @@ class VoiceListener:
                         if confidence > WAKE_WORD_THRESHOLD:
                             if DEBUG:
                                 print(f"[Listener] Wake word detected: {model_name} ({confidence:.2f})")
+                            self.last_wake_time = time.time()
                             return True
                             
         except KeyboardInterrupt:

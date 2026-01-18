@@ -33,7 +33,7 @@ def main():
     from voice.listener import VoiceListener
     from voice.intent import parse_intent
     from voice.commands import execute_command
-    from voice.tts import speak
+    from voice.tts import speak, get_tts
     
     # Handle Ctrl+C gracefully
     def signal_handler(sig, frame):
@@ -54,8 +54,12 @@ def main():
     print("Debug:", "ON" if DEBUG else "OFF")
     print()
     
+    # Preload TTS with cached common phrases (for fast "Yes?" response)
+    print("Loading TTS...")
+    tts = get_tts()
+    
     # Initialize listener
-    print("Loading models...")
+    print("Loading voice models...")
     try:
         listener = VoiceListener()
     except Exception as e:

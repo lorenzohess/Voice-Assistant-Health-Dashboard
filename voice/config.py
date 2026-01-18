@@ -18,7 +18,8 @@ AUDIO_INPUT_DEVICE = None  # Will use default capture device
 
 # Wake word settings
 WAKE_WORD_MODEL = "hey_jarvis"
-WAKE_WORD_THRESHOLD = 0.5  # Confidence threshold (0-1)
+WAKE_WORD_THRESHOLD = 0.7  # Confidence threshold (0-1), higher = fewer false positives
+WAKE_WORD_REFRACTORY = 2.0  # Seconds to wait after detection before listening again
 
 # Vosk STT settings
 VOSK_MODEL_PATH = str(MODELS_DIR / "vosk-model")

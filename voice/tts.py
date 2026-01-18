@@ -1,21 +1,39 @@
 """Text-to-speech using Piper."""
 
 import io
+import os
 import wave
 import subprocess
 from pathlib import Path
 
 import numpy as np
 
-from .config import PIPER_MODEL_PATH, DEBUG
+from .config import PIPER_MODEL_PATH, DEBUG, PROJECT_DIR
+
+# Directory for cached audio files
+CACHE_DIR = PROJECT_DIR / "voice" / ".tts_cache"
 
 
 class TextToSpeech:
-    """Piper TTS wrapper."""
+    """Piper TTS wrapper with caching for common phrases."""
     
-    def __init__(self, model_path: str = None):
+    # Common phrases to precompute
+    COMMON_PHRASES = [
+        "Yes?",
+        "Sorry, I didn't understand that.",
+        "An error occurred.",
+        "Cannot connect to dashboard server.",
+        "Done.",
+        "OK.",
+    ]
+    
+    def __init__(self, model_path: str = None, precompute: bool = True):
         self.model_path = model_path or PIPER_MODEL_PATH
         self._verify_model()
+        self._cache = {}
+        
+        if precompute:
+            self._precompute_common()
     
     def _verify_model(self):
         """Check that model files exist."""
@@ -27,14 +45,60 @@ class TextToSpeech:
         if not json_file.exists():
             raise FileNotFoundError(f"Piper config not found: {json_file}")
     
+    def _get_cache_path(self, text: str) -> Path:
+        """Get cache file path for a phrase."""
+        # Simple hash for filename
+        import hashlib
+        text_hash = hashlib.md5(text.encode()).hexdigest()[:12]
+        return CACHE_DIR / f"{text_hash}.wav"
+    
+    def _precompute_common(self):
+        """Precompute audio for common phrases."""
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        
+        for phrase in self.COMMON_PHRASES:
+            cache_path = self._get_cache_path(phrase)
+            
+            if not cache_path.exists():
+                if DEBUG:
+                    print(f"[TTS] Precomputing: '{phrase}'")
+                self._synthesize_to_file(phrase, cache_path)
+            
+            self._cache[phrase] = cache_path
+    
+    def _synthesize_to_file(self, text: str, output_path: Path):
+        """Synthesize text to a WAV file."""
+        try:
+            subprocess.run(
+                f'echo "{text}" | piper --model {self.model_path} --output_file {output_path}',
+                shell=True,
+                check=True,
+                capture_output=True,
+                timeout=30
+            )
+        except subprocess.CalledProcessError as e:
+            if DEBUG:
+                print(f"[TTS] Synthesis error: {e.stderr.decode()}")
+    
     def speak(self, text: str):
-        """Synthesize and play text."""
+        """Synthesize and play text. Uses cache if available."""
         if DEBUG:
             print(f"[TTS] Speaking: {text}")
         
+        # Check cache first
+        cache_path = self._cache.get(text)
+        if cache_path and cache_path.exists():
+            self._play_cached(cache_path)
+            return
+        
+        # Also check disk cache
+        disk_cache = self._get_cache_path(text)
+        if disk_cache.exists():
+            self._play_cached(disk_cache)
+            return
+        
+        # Synthesize on the fly
         try:
-            # Use piper CLI to synthesize and aplay to play
-            # This is simpler and more reliable than Python bindings
             process = subprocess.Popen(
                 f'echo "{text}" | piper --model {self.model_path} --output-raw | aplay -r 22050 -f S16_LE -t raw -',
                 shell=True,
@@ -54,10 +118,31 @@ class TextToSpeech:
             if DEBUG:
                 print(f"[TTS] Error: {e}")
     
+    def _play_cached(self, cache_path: Path):
+        """Play a cached audio file."""
+        try:
+            subprocess.run(
+                ["aplay", "-q", str(cache_path)],
+                check=True,
+                timeout=10
+            )
+        except Exception as e:
+            if DEBUG:
+                print(f"[TTS] Playback error: {e}")
+    
     def speak_async(self, text: str) -> subprocess.Popen:
         """Synthesize and play text without blocking."""
         if DEBUG:
             print(f"[TTS] Speaking (async): {text}")
+        
+        # Check cache
+        cache_path = self._cache.get(text)
+        if cache_path and cache_path.exists():
+            return subprocess.Popen(
+                ["aplay", "-q", str(cache_path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
         
         return subprocess.Popen(
             f'echo "{text}" | piper --model {self.model_path} --output-raw | aplay -r 22050 -f S16_LE -t raw -',
