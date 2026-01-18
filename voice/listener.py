@@ -68,11 +68,11 @@ class VoiceListener:
                 while True:
                     audio_data, _ = stream.read(self.chunk_size)
                     
-                    # Convert to float32 for wake word model (range -1 to 1)
-                    audio_float = audio_data.flatten().astype(np.float32) / 32768.0
+                    # OpenWakeWord expects int16 audio, flattened
+                    audio_int16 = audio_data.flatten()
                     
                     # Check for wake word
-                    prediction = self.wake_model.predict(audio_float)
+                    prediction = self.wake_model.predict(audio_int16)
                     
                     frame_count += 1
                     
@@ -257,10 +257,10 @@ if __name__ == "__main__":
                 # Check audio level
                 audio_level = np.abs(audio_data).mean()
                 
-                # Convert for model
-                audio_float = audio_data.flatten().astype(np.float32) / 32768.0
+                # OpenWakeWord expects int16 audio, flattened
+                audio_int16 = audio_data.flatten()
                 
-                pred = model.predict(audio_float)
+                pred = model.predict(audio_int16)
                 conf = pred.get('hey_jarvis', 0)
                 max_prediction = max(max_prediction, conf)
                 
