@@ -593,32 +593,61 @@ def log_preset(preset_id):
 def set_volume():
     """Set system volume level (0-100)."""
     import subprocess
+    import os
     data = request.get_json()
     volume = data.get("volume", 50)
     volume = max(0, min(100, int(volume)))
     
+    # Set up environment for ALSA/PulseAudio
+    env = os.environ.copy()
+    env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
+    
     try:
-        subprocess.run(["amixer", "set", "Master", f"{volume}%"], check=True, capture_output=True)
+        # Try with environment first
+        subprocess.run(["amixer", "set", "Master", f"{volume}%"], 
+                      check=True, capture_output=True, env=env)
         return jsonify({"status": "ok", "volume": volume})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    except subprocess.CalledProcessError:
+        # Fallback: try with explicit ALSA card
+        try:
+            subprocess.run(["amixer", "-c", "0", "set", "Master", f"{volume}%"],
+                          check=True, capture_output=True)
+            return jsonify({"status": "ok", "volume": volume})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @main_bp.route("/api/volume/toggle", methods=["POST"])
 def toggle_volume():
     """Toggle system volume mute state."""
     import subprocess
+    import os
+    
+    env = os.environ.copy()
+    env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
+    
     try:
         # Toggle mute using amixer
-        subprocess.run(["amixer", "set", "Master", "toggle"], check=True, capture_output=True)
+        subprocess.run(["amixer", "set", "Master", "toggle"], 
+                      check=True, capture_output=True, env=env)
         
         # Check new state
-        result = subprocess.run(["amixer", "get", "Master"], capture_output=True, text=True)
+        result = subprocess.run(["amixer", "get", "Master"], 
+                               capture_output=True, text=True, env=env)
         muted = "[off]" in result.stdout
         
         return jsonify({"status": "ok", "muted": muted})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e), "muted": False})
+    except subprocess.CalledProcessError:
+        # Fallback with explicit card
+        try:
+            subprocess.run(["amixer", "-c", "0", "set", "Master", "toggle"],
+                          check=True, capture_output=True)
+            result = subprocess.run(["amixer", "-c", "0", "get", "Master"],
+                                   capture_output=True, text=True)
+            muted = "[off]" in result.stdout
+            return jsonify({"status": "ok", "muted": muted})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e), "muted": False})
 
 
 @main_bp.route("/api/volume/state", methods=["GET"])
@@ -626,8 +655,19 @@ def get_volume_state():
     """Get current volume level and mute state."""
     import subprocess
     import re
+    import os
+    
+    env = os.environ.copy()
+    env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
+    
     try:
-        result = subprocess.run(["amixer", "get", "Master"], capture_output=True, text=True)
+        result = subprocess.run(["amixer", "get", "Master"], 
+                               capture_output=True, text=True, env=env)
+        if result.returncode != 0:
+            # Fallback with explicit card
+            result = subprocess.run(["amixer", "-c", "0", "get", "Master"],
+                                   capture_output=True, text=True)
+        
         muted = "[off]" in result.stdout
         
         # Parse volume percentage, e.g., "Playback 42598 [65%] [on]"

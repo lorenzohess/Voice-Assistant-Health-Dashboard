@@ -30,6 +30,11 @@ def find_working_input_device(target_rate=16000, max_retries=5, retry_delay=2):
     """Find an input device that supports the target sample rate."""
     import time
     
+    # If device is explicitly specified, trust it completely (no validation)
+    if AUDIO_INPUT_DEVICE is not None:
+        print(f"[Audio] Using explicitly configured device: {AUDIO_INPUT_DEVICE}")
+        return AUDIO_INPUT_DEVICE
+    
     for attempt in range(max_retries):
         try:
             devices = sd.query_devices()
@@ -39,19 +44,6 @@ def find_working_input_device(target_rate=16000, max_retries=5, retry_delay=2):
                 time.sleep(retry_delay)
                 continue
             raise
-        
-        # If device is explicitly specified, trust it (skip validation)
-        if AUDIO_INPUT_DEVICE is not None:
-            try:
-                device_info = sd.query_devices(AUDIO_INPUT_DEVICE, 'input')
-                print(f"[Audio] Using specified device {AUDIO_INPUT_DEVICE}: {device_info['name']}")
-                return AUDIO_INPUT_DEVICE
-            except Exception as e:
-                print(f"[Audio] Attempt {attempt+1}: Specified device {AUDIO_INPUT_DEVICE} not found: {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    continue
-                raise RuntimeError(f"Specified audio device {AUDIO_INPUT_DEVICE} not found")
         
         # Try default device
         try:
