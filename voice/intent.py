@@ -395,6 +395,13 @@ PATTERNS = [
         "log_workout",
         lambda m: {"duration_minutes": int(m.group(1))}
     ),
+    
+    # Display control
+    (
+        r"(?:shut\s*down|go\s*to\s*sleep|sleep\s*mode|turn\s*off\s*(?:the\s*)?(?:display|screen|monitor))",
+        "display_sleep",
+        lambda m: {}
+    ),
 ]
 
 

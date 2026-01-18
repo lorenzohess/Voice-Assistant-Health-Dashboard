@@ -331,6 +331,24 @@ def cmd_log_custom_metric(params: dict) -> CommandResult:
         return CommandResult(False, f"An error occurred while logging {metric_name}.")
 
 
+def cmd_display_sleep(params: dict) -> CommandResult:
+    """Turn off the display."""
+    try:
+        # Import here to avoid circular imports
+        from alarm.display import display_off
+        
+        if display_off():
+            return CommandResult(True, "Display turned off. Goodnight!")
+        else:
+            return CommandResult(False, "Failed to turn off display.")
+    except ImportError:
+        return CommandResult(False, "Display control not available.")
+    except Exception as e:
+        if DEBUG:
+            print(f"[Commands] Error: {e}")
+        return CommandResult(False, "An error occurred while turning off display.")
+
+
 # Map intent names to handler functions
 COMMAND_HANDLERS = {
     "add_calories": cmd_add_calories,
@@ -341,6 +359,7 @@ COMMAND_HANDLERS = {
     "log_vegetables": cmd_log_vegetables,
     "log_workout": cmd_log_workout,
     "log_custom_metric": cmd_log_custom_metric,
+    "display_sleep": cmd_display_sleep,
 }
 
 
