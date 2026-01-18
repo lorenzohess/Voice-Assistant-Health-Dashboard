@@ -47,15 +47,16 @@ def play_random_playlist() -> bool:
     
     try:
         # mpv with shuffle, no video, and loop playlist
+        # Using ALSA directly to avoid PulseAudio stuttering issues
         _current_player = subprocess.Popen(
             [
                 "mpv",
                 "--no-video",
                 "--shuffle",
                 "--loop-playlist=inf",  # Loop forever until stopped
-                "--audio-buffer=0.5",   # 500ms audio buffer to reduce stuttering
+                "--ao=alsa",            # Use ALSA directly (bypasses PulseAudio)
+                "--audio-buffer=1",     # 1s buffer
                 "--cache=yes",          # Enable cache
-                "--demuxer-max-bytes=50M",  # Pre-buffer up to 50MB
                 "--",  # End of options
                 str(MUSIC_DIR),
             ],
