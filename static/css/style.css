@@ -369,7 +369,8 @@ html, body {
 .volume-controls {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    overflow: hidden;
 }
 
 .volume-slider {
@@ -421,12 +422,13 @@ html, body {
 .mute-btn {
     background: none;
     border: none;
-    font-size: 1.5rem;
+    font-size: 1rem;
     cursor: pointer;
-    padding: 0.25rem;
+    padding: 0.15rem;
     border-radius: 4px;
     transition: background 0.2s;
     line-height: 1;
+    flex-shrink: 0;
 }
 
 .mute-btn:hover {

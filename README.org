@@ -5,7 +5,8 @@
 * Description
 Health Dashboard is a self-hosted, private health tracking system designed for Raspberry Pi. It combines a web-based dashboard with voice control for hands-free data entry.
 
-⚠ *Disclaimer:* ⚠
+⚠️*Disclaimer:*
+ 
 Please be aware that this project was coded entirely with Opus 4.5 Thinking and that I have not looked over the code. As such, this project may not be optimized, may contain security issues, may claim to support non-existent features, and may suffer from the many other limitations of vibe-coding.
 
 This project was implemented to meet my needs because I am the primary user. Thus other users may have trouble using it. For example, my implementation may not be deployable on arbitrary hardware. Also, the design choices reflect my needs and may lack the abstraction needed for a system that's generalizable to different users. Also, I have not verified the installation process and dependencies mentioned in this README.
