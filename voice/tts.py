@@ -123,16 +123,33 @@ class TextToSpeech:
 
         # Synthesize on the fly
         try:
-            process = subprocess.Popen(
-                f'echo "{text}" | piper --model {self.model_path} --output-raw | aplay -r {self.sample_rate} -f S16_LE -t raw -',
-                shell=True,
+            # Use subprocess with pipes to avoid shell escaping issues
+            piper_proc = subprocess.Popen(
+                ["piper", "--model", str(self.model_path), "--output-raw"],
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-            _, stderr = process.communicate(timeout=30)
+            aplay_proc = subprocess.Popen(
+                ["aplay", "-r", str(self.sample_rate), "-f", "S16_LE", "-t", "raw", "-q"],
+                stdin=piper_proc.stdout,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            
+            # Send text to piper
+            piper_proc.stdin.write(text.encode())
+            piper_proc.stdin.close()
+            piper_proc.stdout.close()  # Allow aplay to receive EOF
+            
+            # Wait for completion
+            aplay_proc.wait(timeout=30)
+            piper_proc.wait(timeout=5)
 
-            if process.returncode != 0 and DEBUG:
-                print(f"[TTS] Warning: {stderr.decode()}")
+            if piper_proc.returncode != 0 and DEBUG:
+                print(f"[TTS] Piper warning: {piper_proc.stderr.read().decode()}")
+            if aplay_proc.returncode != 0 and DEBUG:
+                print(f"[TTS] Aplay warning: {aplay_proc.stderr.read().decode()}")
 
         except subprocess.TimeoutExpired:
             process.kill()
@@ -164,8 +181,18 @@ class TextToSpeech:
                 stderr=subprocess.PIPE,
             )
 
+        # Use a wrapper script approach for async
+        # This is a bit hacky but avoids shell escaping issues
+        import tempfile
+        import os
+        
+        # Write text to temp file and speak from it
+        fd, temp_path = tempfile.mkstemp(suffix='.txt')
+        os.write(fd, text.encode())
+        os.close(fd)
+        
         return subprocess.Popen(
-            f'echo "{text}" | piper --model {self.model_path} --output-raw | aplay -r {self.sample_rate} -f S16_LE -t raw -',
+            f'cat "{temp_path}" | piper --model {self.model_path} --output-raw | aplay -r {self.sample_rate} -f S16_LE -t raw -q; rm -f "{temp_path}"',
             shell=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
