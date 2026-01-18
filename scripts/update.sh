@@ -29,6 +29,10 @@ pip install -q -r requirements.txt
 echo "Updating database schema..."
 python -c "from app import create_app, db; app = create_app(); app.app_context().push(); db.create_all(); print('Database schema updated')"
 
+# Run migrations for existing columns
+echo "Running migrations..."
+python scripts/migrate_db.py
+
 # Stop any existing Flask server
 echo "Stopping existing server..."
 pkill -f "python run.py" 2>/dev/null || true

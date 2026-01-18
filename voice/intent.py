@@ -19,6 +19,81 @@ class ParsedIntent:
     confidence: float = 1.0  # 1.0 for regex, lower for Ollama
 
 
+# Word-to-number mapping (Vosk often transcribes numbers as words)
+WORD_NUMBERS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
+    "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
+    "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+    "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30,
+    "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+    "eighty": 80, "ninety": 90, "hundred": 100, "thousand": 1000,
+}
+
+
+def words_to_number(text: str) -> Optional[float]:
+    """Convert word-based numbers to numeric value.
+    
+    Examples:
+        "five hundred" -> 500
+        "two thousand" -> 2000
+        "eighty five" -> 85
+        "8" -> 8
+        "7.5" -> 7.5
+    """
+    text = text.strip().lower()
+    
+    # Already a number?
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    
+    # Parse word numbers
+    words = text.split()
+    total = 0
+    current = 0
+    
+    for word in words:
+        if word in WORD_NUMBERS:
+            val = WORD_NUMBERS[word]
+            if val == 100:
+                current = current * 100 if current else 100
+            elif val == 1000:
+                current = current * 1000 if current else 1000
+                total += current
+                current = 0
+            else:
+                current += val
+        elif word == "and":
+            continue
+        else:
+            # Unknown word, try as number
+            try:
+                current += float(word)
+            except ValueError:
+                pass
+    
+    total += current
+    return total if total > 0 else None
+
+
+def preprocess_text(text: str) -> str:
+    """Preprocess text to normalize number words to digits."""
+    # Common patterns with word numbers
+    patterns = [
+        # "five hundred calories" -> "500 calories"
+        (r'\b((?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)(?:\s+(?:and\s+)?(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand))*)\b',
+         lambda m: str(int(words_to_number(m.group(1)))) if words_to_number(m.group(1)) else m.group(1)),
+    ]
+    
+    result = text.lower()
+    for pattern, replacement in patterns:
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    
+    return result
+
+
 # Unit conversion helpers
 def convert_weight_to_kg(value: float, unit: str) -> float:
     """Convert weight to kilograms."""
@@ -43,24 +118,25 @@ def convert_to_grams(value: float, unit: str) -> float:
 
 
 # Regex patterns: (pattern, intent_name, param_extractor)
+# Note: Text is preprocessed so word numbers become digits
 PATTERNS = [
-    # Calories - direct amount
+    # Calories - direct amount (matches "add 500 calories", "had 500 calories", "added 500 calories")
     (
-        r"(?:add|log|ate|had)\s+(\d+)\s*(?:calories?|cals?|kcal)",
+        r"(?:add(?:ed)?|log(?:ged)?|ate|had|eaten)\s+(\d+)\s*(?:calories?|cals?|kcal)",
         "add_calories",
         lambda m: {"calories": int(m.group(1))}
     ),
     
-    # Calories - food with calories
+    # Calories - food with calories ("add eggs 140 calories")
     (
-        r"(?:add|log|ate|had)\s+(.+?)\s+(\d+)\s*(?:calories?|cals?|kcal)",
+        r"(?:add(?:ed)?|log(?:ged)?|ate|had)\s+(.+?)\s+(\d+)\s*(?:calories?|cals?|kcal)",
         "add_calories",
         lambda m: {"food": m.group(1).strip(), "calories": int(m.group(2))}
     ),
     
     # Calories - food lookup (will need API to compute)
     (
-        r"(?:add|log|ate|had)\s+(\d+(?:\.\d+)?)\s*(g|oz|cup|cups|piece|pieces|serving|servings)?\s*(?:of\s+)?(.+?)(?:\s+to\s+calories)?$",
+        r"(?:add(?:ed)?|log(?:ged)?|ate|had)\s+(\d+(?:\.\d+)?)\s*(g|oz|cup|cups|piece|pieces|serving|servings)?\s*(?:of\s+)?(.+?)(?:\s+to\s+calories)?$",
         "add_food",
         lambda m: {
             "quantity": float(m.group(1)),
@@ -71,12 +147,12 @@ PATTERNS = [
     
     # Weight
     (
-        r"(?:my\s+)?weight\s+(?:is\s+|today\s+)?(\d+(?:\.\d+)?)\s*(kg|lbs?|pounds?|kilos?)?",
+        r"(?:my\s+)?weight\s+(?:is\s+|was\s+|today\s+)?(\d+(?:\.\d+)?)\s*(kg|lbs?|pounds?|kilos?)?",
         "log_weight",
         lambda m: {"weight_kg": convert_weight_to_kg(float(m.group(1)), m.group(2))}
     ),
     (
-        r"(?:i\s+)?weigh\s+(\d+(?:\.\d+)?)\s*(kg|lbs?|pounds?|kilos?)?",
+        r"(?:i\s+)?weigh(?:ed)?\s+(\d+(?:\.\d+)?)\s*(kg|lbs?|pounds?|kilos?)?",
         "log_weight",
         lambda m: {"weight_kg": convert_weight_to_kg(float(m.group(1)), m.group(2))}
     ),
@@ -105,7 +181,7 @@ PATTERNS = [
     
     # Vegetables
     (
-        r"(?:add|log|ate|had)\s+(\d+)\s*(?:servings?\s+)?(?:of\s+)?vegetables?",
+        r"(?:add(?:ed)?|log(?:ged)?|ate|had)\s+(\d+)\s*(?:servings?\s+)?(?:of\s+)?vegetables?",
         "log_vegetables",
         lambda m: {"servings": int(m.group(1))}
     ),
@@ -126,10 +202,14 @@ PATTERNS = [
 
 def parse_with_regex(text: str) -> Optional[ParsedIntent]:
     """Try to parse intent using regex patterns."""
-    text_lower = text.lower().strip()
+    # Preprocess to convert word numbers to digits
+    processed = preprocess_text(text)
+    
+    if DEBUG and processed != text.lower():
+        print(f"[Intent] Preprocessed: '{text}' -> '{processed}'")
     
     for pattern, intent, extractor in PATTERNS:
-        match = re.search(pattern, text_lower, re.IGNORECASE)
+        match = re.search(pattern, processed, re.IGNORECASE)
         if match:
             try:
                 params = extractor(match)
@@ -149,23 +229,33 @@ def parse_with_regex(text: str) -> Optional[ParsedIntent]:
     return None
 
 
+# Valid intent names that Ollama can return
+VALID_INTENTS = {"add_calories", "add_food", "log_weight", "log_sleep", "log_wake", "log_vegetables", "log_workout"}
+
+
 def parse_with_ollama(text: str) -> Optional[ParsedIntent]:
     """Use Ollama LLM to parse intent as fallback."""
     if DEBUG:
         print(f"[Intent] Using Ollama fallback for: {text}")
     
-    prompt = f"""Parse this health tracking command into a JSON object.
-Possible intents: add_calories, add_food, log_weight, log_sleep, log_wake, log_vegetables, log_workout
+    prompt = f"""Parse this health tracking voice command into JSON.
+
+VALID INTENTS (use exactly these names):
+- add_calories: for logging calorie intake
+- log_weight: for logging body weight
+- log_sleep: for logging sleep hours
+- log_vegetables: for logging vegetable servings
+- log_workout: for logging exercise
 
 Command: "{text}"
 
-Return ONLY a JSON object with "intent" and "params" fields. Examples:
-- "add 200 calories" -> {{"intent": "add_calories", "params": {{"calories": 200}}}}
+Respond with ONLY a JSON object, no other text:
+{{"intent": "<intent_name>", "params": {{"<param>": <value>}}}}
+
+Examples:
+- "had 500 calories" -> {{"intent": "add_calories", "params": {{"calories": 500}}}}
 - "I weigh 180 pounds" -> {{"intent": "log_weight", "params": {{"weight_kg": 81.6}}}}
 - "slept 8 hours" -> {{"intent": "log_sleep", "params": {{"hours": 8}}}}
-- "add 2 servings vegetables" -> {{"intent": "log_vegetables", "params": {{"servings": 2}}}}
-
-If you cannot parse the command, return {{"intent": "unknown", "params": {{}}}}
 
 JSON:"""
 
@@ -192,7 +282,8 @@ JSON:"""
                 intent = parsed.get("intent", "unknown")
                 params = parsed.get("params", {})
                 
-                if intent != "unknown":
+                # Validate intent is one we know
+                if intent in VALID_INTENTS:
                     if DEBUG:
                         print(f"[Intent] Ollama parsed: {intent} -> {params}")
                     return ParsedIntent(
@@ -201,6 +292,9 @@ JSON:"""
                         raw_text=text,
                         confidence=0.7
                     )
+                else:
+                    if DEBUG:
+                        print(f"[Intent] Ollama returned invalid intent: {intent}")
     except requests.exceptions.Timeout:
         if DEBUG:
             print("[Intent] Ollama timeout")
