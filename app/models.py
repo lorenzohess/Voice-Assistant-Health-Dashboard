@@ -101,10 +101,8 @@ class CalorieEntry(db.Model):
     date = db.Column(db.Date, nullable=False, index=True)
     meal_name = db.Column(db.String(200), nullable=False)
     calories = db.Column(db.Float, nullable=False)
-    protein_g = db.Column(db.Float, nullable=True)
-    carbs_g = db.Column(db.Float, nullable=True)
-    fat_g = db.Column(db.Float, nullable=True)
-    meal_type = db.Column(db.String(50), nullable=True)  # breakfast, lunch, dinner, snack
+    quantity = db.Column(db.String(50), nullable=True)  # e.g., "150g", "2 cups"
+    food_id = db.Column(db.Integer, nullable=True)  # Reference to foods table (if computed)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
@@ -116,10 +114,8 @@ class CalorieEntry(db.Model):
             "date": self.date.isoformat(),
             "meal_name": self.meal_name,
             "calories": self.calories,
-            "protein_g": self.protein_g,
-            "carbs_g": self.carbs_g,
-            "fat_g": self.fat_g,
-            "meal_type": self.meal_type,
+            "quantity": self.quantity,
+            "food_id": self.food_id,
         }
 
 
@@ -132,9 +128,8 @@ class MealPreset(db.Model):
     name = db.Column(db.String(200), nullable=False, unique=True)
     category = db.Column(db.String(50), nullable=True)  # breakfast, lunch, dinner, snack
     calories = db.Column(db.Float, nullable=False)
-    protein_g = db.Column(db.Float, nullable=True)
-    carbs_g = db.Column(db.Float, nullable=True)
-    fat_g = db.Column(db.Float, nullable=True)
+    quantity = db.Column(db.String(50), nullable=True)  # e.g., "1 piece", "100g"
+    food_id = db.Column(db.Integer, nullable=True)  # Reference to foods table
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
@@ -146,9 +141,8 @@ class MealPreset(db.Model):
             "name": self.name,
             "category": self.category,
             "calories": self.calories,
-            "protein_g": self.protein_g,
-            "carbs_g": self.carbs_g,
-            "fat_g": self.fat_g,
+            "quantity": self.quantity,
+            "food_id": self.food_id,
         }
 
 

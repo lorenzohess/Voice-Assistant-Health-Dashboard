@@ -21,5 +21,8 @@ rapidfuzz==3.5.2
 # Date/time utilities
 python-dateutil==2.8.2
 
+# HTTP client (for LLM API calls)
+requests>=2.31.0
+
 # For CSV export
 # (csv is built-in, no extra package needed)

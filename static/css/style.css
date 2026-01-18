@@ -1026,3 +1026,32 @@ input[type="color"]::-webkit-color-swatch {
     max-height: 300px;
     overflow-y: auto;
 }
+
+/* Form hints */
+.form-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* Compute button inline */
+.form-group-with-btn {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    width: 100%;
+}
+
+.form-group-with-btn input[type="text"] {
+    flex: 1 1 auto;
+    min-width: 80px;
+    width: auto;
+}
+
+.form-group-with-btn .btn {
+    white-space: nowrap;
+    height: 2.75rem;
+    flex-shrink: 0;
+    padding: 0 1rem;
+}

@@ -14,70 +14,89 @@ from app.models import (
     WeightEntry, SleepEntry, WakeTimeEntry, WorkoutEntry,
     CustomMetric, CustomMetricEntry
 )
-from app.food_db import init_food_db, add_custom_food, get_food_db_connection
+from app.food_db import init_food_db, add_food, get_food_db_connection
 
 
-# Common foods with nutritional data
+# Sample foods with new schema
+# calories_per_unit: calories per canonical unit (g, ml, or piece)
 SAMPLE_FOODS = [
-    # Breakfast
-    {"name": "Scrambled eggs (2)", "calories": 180, "protein": 12, "carbs": 2, "fat": 14, "category": "breakfast"},
-    {"name": "Fried egg", "calories": 90, "protein": 6, "carbs": 0.5, "fat": 7, "category": "breakfast"},
-    {"name": "Boiled egg", "calories": 78, "protein": 6, "carbs": 0.5, "fat": 5, "category": "breakfast"},
-    {"name": "Oatmeal with milk", "calories": 250, "protein": 8, "carbs": 45, "fat": 5, "category": "breakfast"},
-    {"name": "Greek yogurt", "calories": 100, "protein": 17, "carbs": 6, "fat": 0.5, "category": "breakfast"},
-    {"name": "Banana", "calories": 105, "protein": 1.3, "carbs": 27, "fat": 0.4, "category": "fruit"},
-    {"name": "Toast with butter", "calories": 150, "protein": 3, "carbs": 20, "fat": 7, "category": "breakfast"},
-    {"name": "Croissant", "calories": 230, "protein": 5, "carbs": 26, "fat": 12, "category": "breakfast"},
+    # Piece-based foods (calories per piece)
+    {"name": "Egg (large)", "calories_per_unit": 70, "unit_type": "piece", "canonical_unit": "piece", "category": "breakfast",
+     "aliases": ["egg", "eggs", "boiled egg", "fried egg", "scrambled egg"]},
+    {"name": "Banana (medium)", "calories_per_unit": 105, "unit_type": "piece", "canonical_unit": "piece", "category": "fruit",
+     "aliases": ["banana", "bananas"]},
+    {"name": "Apple (medium)", "calories_per_unit": 95, "unit_type": "piece", "canonical_unit": "piece", "category": "fruit",
+     "aliases": ["apple", "apples"]},
+    {"name": "Orange (medium)", "calories_per_unit": 62, "unit_type": "piece", "canonical_unit": "piece", "category": "fruit",
+     "aliases": ["orange", "oranges"]},
+    {"name": "Slice of bread (white)", "calories_per_unit": 75, "unit_type": "piece", "canonical_unit": "piece", "category": "carbs",
+     "aliases": ["bread", "white bread", "toast", "slice of bread"]},
+    {"name": "Slice of bread (whole wheat)", "calories_per_unit": 70, "unit_type": "piece", "canonical_unit": "piece", "category": "carbs",
+     "aliases": ["whole wheat bread", "wheat bread", "brown bread"]},
+    {"name": "Croissant", "calories_per_unit": 230, "unit_type": "piece", "canonical_unit": "piece", "category": "breakfast",
+     "aliases": ["croissant"]},
+    {"name": "Avocado (half)", "calories_per_unit": 160, "unit_type": "piece", "canonical_unit": "piece", "category": "fruit",
+     "aliases": ["avocado", "half avocado"]},
     
-    # Lunch/Dinner proteins
-    {"name": "Chicken breast (grilled)", "calories": 165, "protein": 31, "carbs": 0, "fat": 3.6, "category": "protein", "serving_unit": "100g"},
-    {"name": "Salmon fillet", "calories": 208, "protein": 20, "carbs": 0, "fat": 13, "category": "protein", "serving_unit": "100g"},
-    {"name": "Ground beef (lean)", "calories": 250, "protein": 26, "carbs": 0, "fat": 15, "category": "protein", "serving_unit": "100g"},
-    {"name": "Tofu", "calories": 76, "protein": 8, "carbs": 2, "fat": 4.5, "category": "protein", "serving_unit": "100g"},
-    {"name": "Tuna (canned)", "calories": 116, "protein": 26, "carbs": 0, "fat": 0.8, "category": "protein", "serving_unit": "100g"},
+    # Mass-based foods (calories per gram)
+    {"name": "Chicken breast (cooked)", "calories_per_unit": 1.65, "unit_type": "mass", "canonical_unit": "g", "category": "protein",
+     "aliases": ["chicken", "grilled chicken", "chicken breast", "cooked chicken"]},
+    {"name": "Chicken breast (raw)", "calories_per_unit": 1.20, "unit_type": "mass", "canonical_unit": "g", "category": "protein",
+     "aliases": ["raw chicken", "raw chicken breast"]},
+    {"name": "Salmon (cooked)", "calories_per_unit": 2.08, "unit_type": "mass", "canonical_unit": "g", "category": "protein",
+     "aliases": ["salmon", "grilled salmon", "baked salmon", "salmon fillet"]},
+    {"name": "Ground beef (lean, cooked)", "calories_per_unit": 2.50, "unit_type": "mass", "canonical_unit": "g", "category": "protein",
+     "aliases": ["ground beef", "beef", "hamburger meat"]},
+    {"name": "Tofu", "calories_per_unit": 0.76, "unit_type": "mass", "canonical_unit": "g", "category": "protein",
+     "aliases": ["tofu"]},
+    {"name": "Tuna (canned)", "calories_per_unit": 1.16, "unit_type": "mass", "canonical_unit": "g", "category": "protein",
+     "aliases": ["tuna", "canned tuna"]},
+    {"name": "White rice (cooked)", "calories_per_unit": 1.30, "unit_type": "mass", "canonical_unit": "g", "category": "carbs",
+     "aliases": ["white rice", "rice", "cooked rice"]},
+    {"name": "Brown rice (cooked)", "calories_per_unit": 1.12, "unit_type": "mass", "canonical_unit": "g", "category": "carbs",
+     "aliases": ["brown rice"]},
+    {"name": "Pasta (cooked)", "calories_per_unit": 1.31, "unit_type": "mass", "canonical_unit": "g", "category": "carbs",
+     "aliases": ["pasta", "spaghetti", "noodles", "cooked pasta"]},
+    {"name": "Pasta (dry)", "calories_per_unit": 3.71, "unit_type": "mass", "canonical_unit": "g", "category": "carbs",
+     "aliases": ["dry pasta", "uncooked pasta"]},
+    {"name": "Oatmeal (dry)", "calories_per_unit": 3.89, "unit_type": "mass", "canonical_unit": "g", "category": "breakfast",
+     "aliases": ["oatmeal", "oats", "dry oatmeal"]},
+    {"name": "Almonds", "calories_per_unit": 5.79, "unit_type": "mass", "canonical_unit": "g", "category": "snack",
+     "aliases": ["almonds", "almond"]},
+    {"name": "Peanut butter", "calories_per_unit": 5.88, "unit_type": "mass", "canonical_unit": "g", "category": "snack",
+     "aliases": ["peanut butter", "pb"]},
+    {"name": "Cheddar cheese", "calories_per_unit": 4.03, "unit_type": "mass", "canonical_unit": "g", "category": "dairy",
+     "aliases": ["cheddar", "cheese", "cheddar cheese"]},
+    {"name": "Broccoli (cooked)", "calories_per_unit": 0.35, "unit_type": "mass", "canonical_unit": "g", "category": "vegetable",
+     "aliases": ["broccoli", "steamed broccoli"]},
+    {"name": "Carrots (raw)", "calories_per_unit": 0.41, "unit_type": "mass", "canonical_unit": "g", "category": "vegetable",
+     "aliases": ["carrots", "carrot", "raw carrots"]},
+    {"name": "Spinach (raw)", "calories_per_unit": 0.23, "unit_type": "mass", "canonical_unit": "g", "category": "vegetable",
+     "aliases": ["spinach", "raw spinach"]},
+    {"name": "Potato (baked)", "calories_per_unit": 0.93, "unit_type": "mass", "canonical_unit": "g", "category": "carbs",
+     "aliases": ["potato", "baked potato"]},
+    {"name": "Sweet potato (baked)", "calories_per_unit": 0.90, "unit_type": "mass", "canonical_unit": "g", "category": "carbs",
+     "aliases": ["sweet potato"]},
     
-    # Carbs
-    {"name": "White rice (cooked)", "calories": 130, "protein": 2.7, "carbs": 28, "fat": 0.3, "category": "carbs", "serving_unit": "100g"},
-    {"name": "Brown rice (cooked)", "calories": 112, "protein": 2.6, "carbs": 24, "fat": 0.9, "category": "carbs", "serving_unit": "100g"},
-    {"name": "Pasta (cooked)", "calories": 131, "protein": 5, "carbs": 25, "fat": 1.1, "category": "carbs", "serving_unit": "100g"},
-    {"name": "Whole wheat bread", "calories": 80, "protein": 4, "carbs": 15, "fat": 1, "category": "carbs", "serving_unit": "slice"},
-    {"name": "Baked potato", "calories": 161, "protein": 4.3, "carbs": 37, "fat": 0.2, "category": "carbs", "serving_unit": "medium"},
-    {"name": "Sweet potato", "calories": 103, "protein": 2.3, "carbs": 24, "fat": 0.1, "category": "carbs", "serving_unit": "medium"},
-    
-    # Vegetables
-    {"name": "Broccoli (steamed)", "calories": 55, "protein": 3.7, "carbs": 11, "fat": 0.6, "category": "vegetable", "serving_unit": "cup"},
-    {"name": "Spinach (raw)", "calories": 7, "protein": 0.9, "carbs": 1.1, "fat": 0.1, "category": "vegetable", "serving_unit": "cup"},
-    {"name": "Carrots", "calories": 52, "protein": 1.2, "carbs": 12, "fat": 0.3, "category": "vegetable", "serving_unit": "100g"},
-    {"name": "Green beans", "calories": 31, "protein": 1.8, "carbs": 7, "fat": 0.1, "category": "vegetable", "serving_unit": "cup"},
-    {"name": "Mixed salad", "calories": 20, "protein": 1.5, "carbs": 4, "fat": 0.2, "category": "vegetable", "serving_unit": "cup"},
-    
-    # Fruits
-    {"name": "Apple", "calories": 95, "protein": 0.5, "carbs": 25, "fat": 0.3, "category": "fruit"},
-    {"name": "Orange", "calories": 62, "protein": 1.2, "carbs": 15, "fat": 0.2, "category": "fruit"},
-    {"name": "Blueberries", "calories": 85, "protein": 1.1, "carbs": 21, "fat": 0.5, "category": "fruit", "serving_unit": "cup"},
-    {"name": "Strawberries", "calories": 50, "protein": 1, "carbs": 12, "fat": 0.5, "category": "fruit", "serving_unit": "cup"},
-    
-    # Snacks
-    {"name": "Almonds", "calories": 164, "protein": 6, "carbs": 6, "fat": 14, "category": "snack", "serving_unit": "oz"},
-    {"name": "Peanut butter", "calories": 190, "protein": 7, "carbs": 7, "fat": 16, "category": "snack", "serving_unit": "2 tbsp"},
-    {"name": "Dark chocolate", "calories": 170, "protein": 2, "carbs": 13, "fat": 12, "category": "snack", "serving_unit": "oz"},
-    {"name": "Cheese (cheddar)", "calories": 113, "protein": 7, "carbs": 0.4, "fat": 9, "category": "dairy", "serving_unit": "oz"},
-    
-    # Drinks
-    {"name": "Whole milk", "calories": 149, "protein": 8, "carbs": 12, "fat": 8, "category": "dairy", "serving_unit": "cup"},
-    {"name": "Skim milk", "calories": 83, "protein": 8, "carbs": 12, "fat": 0.2, "category": "dairy", "serving_unit": "cup"},
-    {"name": "Orange juice", "calories": 112, "protein": 1.7, "carbs": 26, "fat": 0.5, "category": "drink", "serving_unit": "cup"},
-    {"name": "Coffee (black)", "calories": 2, "protein": 0.3, "carbs": 0, "fat": 0, "category": "drink", "serving_unit": "cup"},
-    {"name": "Coffee with milk", "calories": 30, "protein": 1, "carbs": 2, "fat": 1.5, "category": "drink", "serving_unit": "cup"},
-    
-    # Common meals
-    {"name": "Chicken salad", "calories": 350, "protein": 25, "carbs": 15, "fat": 20, "category": "meal"},
-    {"name": "Burrito bowl", "calories": 650, "protein": 35, "carbs": 70, "fat": 25, "category": "meal"},
-    {"name": "Grilled cheese sandwich", "calories": 390, "protein": 13, "carbs": 30, "fat": 25, "category": "meal"},
-    {"name": "Veggie stir fry", "calories": 250, "protein": 8, "carbs": 30, "fat": 12, "category": "meal"},
-    {"name": "Spaghetti bolognese", "calories": 450, "protein": 22, "carbs": 55, "fat": 15, "category": "meal"},
-    {"name": "Caesar salad", "calories": 280, "protein": 8, "carbs": 12, "fat": 22, "category": "meal"},
-    {"name": "Protein shake", "calories": 200, "protein": 30, "carbs": 10, "fat": 3, "category": "drink"},
+    # Volume-based foods (calories per ml)
+    {"name": "Whole milk (3.25%)", "calories_per_unit": 0.63, "unit_type": "volume", "canonical_unit": "ml", "category": "dairy",
+     "aliases": ["whole milk", "milk", "full fat milk"]},
+    {"name": "Skim milk", "calories_per_unit": 0.35, "unit_type": "volume", "canonical_unit": "ml", "category": "dairy",
+     "aliases": ["skim milk", "nonfat milk", "fat free milk"]},
+    {"name": "2% milk", "calories_per_unit": 0.50, "unit_type": "volume", "canonical_unit": "ml", "category": "dairy",
+     "aliases": ["2% milk", "reduced fat milk", "2 percent milk"]},
+    {"name": "Orange juice", "calories_per_unit": 0.47, "unit_type": "volume", "canonical_unit": "ml", "category": "drink",
+     "aliases": ["orange juice", "oj"]},
+    {"name": "Apple juice", "calories_per_unit": 0.46, "unit_type": "volume", "canonical_unit": "ml", "category": "drink",
+     "aliases": ["apple juice"]},
+    {"name": "Coffee (black)", "calories_per_unit": 0.01, "unit_type": "volume", "canonical_unit": "ml", "category": "drink",
+     "aliases": ["coffee", "black coffee"]},
+    {"name": "Greek yogurt", "calories_per_unit": 0.59, "unit_type": "volume", "canonical_unit": "ml", "category": "dairy",
+     "aliases": ["greek yogurt", "yogurt"]},
+    {"name": "Olive oil", "calories_per_unit": 8.84, "unit_type": "volume", "canonical_unit": "ml", "category": "fats",
+     "aliases": ["olive oil", "oil"]},
+    {"name": "Honey", "calories_per_unit": 3.04, "unit_type": "volume", "canonical_unit": "ml", "category": "sweetener",
+     "aliases": ["honey"]},
 ]
 
 
@@ -85,24 +104,23 @@ def add_sample_foods():
     """Add sample foods to the food database."""
     init_food_db()
     
-    # Clear existing foods
+    # Clear existing foods and aliases
     conn = get_food_db_connection()
     cursor = conn.cursor()
+    cursor.execute("DELETE FROM food_aliases")
     cursor.execute("DELETE FROM foods")
     conn.commit()
     conn.close()
     
-    # Add sample foods
+    # Add sample foods with aliases
     for food in SAMPLE_FOODS:
-        add_custom_food(
+        add_food(
             name=food["name"],
-            calories=food["calories"],
-            protein=food.get("protein"),
-            carbs=food.get("carbs"),
-            fat=food.get("fat"),
-            serving_size=food.get("serving_size", 1),
-            serving_unit=food.get("serving_unit", "serving"),
-            category=food.get("category", "other")
+            calories_per_unit=food["calories_per_unit"],
+            unit_type=food["unit_type"],
+            canonical_unit=food["canonical_unit"],
+            category=food.get("category"),
+            aliases=food.get("aliases", [])
         )
     
     print(f"  - {len(SAMPLE_FOODS)} foods in database")

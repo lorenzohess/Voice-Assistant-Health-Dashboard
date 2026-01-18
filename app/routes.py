@@ -16,10 +16,13 @@ from app.models import (
     MealPreset, CustomMetric, CustomMetricEntry
 )
 from app.pool_schedule import get_pool_status, get_weekly_schedule
-from app.food_db import search_foods, get_food_by_id, add_custom_food, get_food_count, init_food_db
+from app.food_db import (
+    search_foods, get_food_by_id, add_food, get_food_count, init_food_db,
+    parse_quantity, compute_calories
+)
 from app.validation import (
     validate_weight, validate_calories_single, validate_calories_daily,
-    validate_sleep, validate_macros
+    validate_sleep
 )
 
 main_bp = Blueprint("main", __name__)
@@ -394,18 +397,50 @@ def create_custom_food():
     """Add a custom food to the database."""
     data = request.get_json()
     
-    food_id = add_custom_food(
+    food_id = add_food(
         name=data["name"],
-        calories=float(data["calories"]),
-        protein=float(data["protein"]) if data.get("protein") else None,
-        carbs=float(data["carbs"]) if data.get("carbs") else None,
-        fat=float(data["fat"]) if data.get("fat") else None,
-        serving_size=float(data.get("serving_size", 100)),
-        serving_unit=data.get("serving_unit", "g"),
-        brand=data.get("brand"),
+        calories_per_unit=float(data["calories_per_unit"]),
+        unit_type=data.get("unit_type", "mass"),
+        canonical_unit=data.get("canonical_unit", "g"),
+        category=data.get("category"),
+        aliases=data.get("aliases", []),
     )
     
     return jsonify({"status": "ok", "id": food_id})
+
+
+@main_bp.route("/api/foods/compute", methods=["POST"])
+def compute_food_calories():
+    """Compute calories for a food + quantity."""
+    data = request.get_json()
+    
+    food_id = data.get("food_id")
+    quantity_text = data.get("quantity")
+    
+    if not food_id or not quantity_text:
+        return jsonify({"status": "error", "message": "food_id and quantity are required"}), 400
+    
+    # Parse quantity
+    parsed = parse_quantity(quantity_text)
+    if not parsed["valid"]:
+        return jsonify({
+            "status": "error",
+            "message": parsed.get("error", f"Could not parse quantity: {quantity_text}")
+        }), 400
+    
+    # Compute calories
+    result = compute_calories(food_id, parsed["quantity"], parsed["unit"])
+    
+    if result.get("error"):
+        return jsonify({"status": "error", "message": result["error"]}), 400
+    
+    return jsonify({
+        "status": "ok",
+        "calories": result["calories"],
+        "food_name": result["food_name"],
+        "quantity": result["quantity"],
+        "unit": result["unit"],
+    })
 
 
 # --- Calorie Entry API ---
@@ -424,19 +459,9 @@ def add_calorie_entry():
     if not validation.is_valid:
         return jsonify({"status": "error", "message": validation.error_message}), 400
     
-    # Check macros if provided
-    protein = float(data["protein"]) if data.get("protein") else None
-    carbs = float(data["carbs"]) if data.get("carbs") else None
-    fat = float(data["fat"]) if data.get("fat") else None
-    
     warnings = []
     if validation.has_warning:
         warnings.append(validation.warning_message)
-    
-    if protein is not None and carbs is not None and fat is not None:
-        macro_validation = validate_macros(calories, protein, carbs, fat)
-        if macro_validation.has_warning:
-            warnings.append(macro_validation.warning_message)
     
     # Check daily total
     daily_validation = validate_calories_daily(entry_date, calories)
@@ -447,10 +472,8 @@ def add_calorie_entry():
         date=entry_date,
         meal_name=meal_name,
         calories=calories,
-        protein_g=protein,
-        carbs_g=carbs,
-        fat_g=fat,
-        meal_type=data.get("meal_type"),
+        quantity=data.get("quantity"),
+        food_id=int(data["food_id"]) if data.get("food_id") else None,
     )
     db.session.add(entry)
     db.session.commit()
@@ -504,9 +527,8 @@ def create_preset():
         name=data["name"],
         category=data.get("category"),
         calories=float(data["calories"]),
-        protein_g=float(data["protein"]) if data.get("protein") else None,
-        carbs_g=float(data["carbs"]) if data.get("carbs") else None,
-        fat_g=float(data["fat"]) if data.get("fat") else None,
+        quantity=data.get("quantity"),
+        food_id=int(data["food_id"]) if data.get("food_id") else None,
     )
     db.session.add(preset)
     db.session.commit()
@@ -523,9 +545,8 @@ def update_preset(preset_id):
     preset.name = data.get("name", preset.name)
     preset.category = data.get("category", preset.category)
     preset.calories = float(data["calories"]) if data.get("calories") else preset.calories
-    preset.protein_g = float(data["protein"]) if data.get("protein") else preset.protein_g
-    preset.carbs_g = float(data["carbs"]) if data.get("carbs") else preset.carbs_g
-    preset.fat_g = float(data["fat"]) if data.get("fat") else preset.fat_g
+    preset.quantity = data.get("quantity", preset.quantity)
+    preset.food_id = int(data["food_id"]) if data.get("food_id") else preset.food_id
     
     db.session.commit()
     return jsonify({"status": "ok"})
@@ -552,10 +573,8 @@ def log_preset(preset_id):
         date=entry_date,
         meal_name=preset.name,
         calories=preset.calories,
-        protein_g=preset.protein_g,
-        carbs_g=preset.carbs_g,
-        fat_g=preset.fat_g,
-        meal_type=preset.category,
+        quantity=preset.quantity,
+        food_id=preset.food_id,
     )
     db.session.add(entry)
     db.session.commit()

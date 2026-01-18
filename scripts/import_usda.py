@@ -2,16 +2,15 @@
 """
 Import USDA FoodData Central data into the local food database.
 
-This script downloads the USDA SR Legacy dataset (smaller, ~7500 common foods)
-and imports it into SQLite for offline use.
+This script downloads the USDA SR Legacy dataset (~7500 common foods)
+and imports it into SQLite with the new schema (calories per gram).
 
 Usage:
-    python scripts/import_usda.py
+    python scripts/import_usda.py [--limit N] [--keep-existing]
 
-The script will:
-1. Download the USDA SR Legacy CSV files
-2. Parse and import foods with nutritional data
-3. Create an indexed SQLite database for fast searching
+Options:
+    --limit N        Only import top N foods (by calorie data quality)
+    --keep-existing  Don't delete existing foods, just add new ones
 """
 
 import csv
@@ -21,10 +20,14 @@ import sqlite3
 import urllib.request
 import zipfile
 import tempfile
+import argparse
+import re
 from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.food_db import init_food_db, get_food_db_connection
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 FOOD_DB_PATH = DATA_DIR / "foods.db"
@@ -40,7 +43,6 @@ def download_usda_data(temp_dir: str) -> str:
     print(f"Downloading USDA SR Legacy dataset...")
     print(f"URL: {USDA_URL}")
     
-    # Download with progress
     def report_progress(block_num, block_size, total_size):
         downloaded = block_num * block_size
         percent = min(100, downloaded * 100 / total_size) if total_size > 0 else 0
@@ -49,7 +51,6 @@ def download_usda_data(temp_dir: str) -> str:
     urllib.request.urlretrieve(USDA_URL, zip_path, report_progress)
     print("\nDownload complete!")
     
-    # Extract
     print("Extracting...")
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(temp_dir)
@@ -58,7 +59,7 @@ def download_usda_data(temp_dir: str) -> str:
 
 
 def parse_nutrients(nutrient_file: str) -> dict:
-    """Parse nutrient data into a dict keyed by (fdc_id, nutrient_id)."""
+    """Parse nutrient data into a dict keyed by fdc_id."""
     nutrients = {}
     
     with open(nutrient_file, 'r', encoding='utf-8') as f:
@@ -78,16 +79,46 @@ def parse_nutrients(nutrient_file: str) -> dict:
     return nutrients
 
 
-def import_to_sqlite(temp_dir: str):
-    """Import USDA data into SQLite database."""
+def generate_simple_aliases(name: str) -> list[str]:
+    """Generate basic aliases from USDA food name."""
+    aliases = []
+    name_lower = name.lower()
+    
+    # Remove common prefixes/suffixes
+    # USDA names are like "Chicken, broilers or fryers, breast, meat only, cooked, roasted"
+    
+    # Split by comma and take meaningful parts
+    parts = [p.strip() for p in name_lower.split(',')]
+    
+    if parts:
+        # First part is usually the main food
+        main = parts[0]
+        aliases.append(main)
+        
+        # Combine first two parts if there are more
+        if len(parts) >= 2:
+            aliases.append(f"{parts[0]} {parts[1]}")
+        
+        # Look for cooking method
+        cooking_methods = ['raw', 'cooked', 'roasted', 'grilled', 'fried', 'baked', 'boiled', 'steamed']
+        for part in parts:
+            for method in cooking_methods:
+                if method in part:
+                    aliases.append(f"{method} {parts[0]}")
+                    break
+    
+    # Remove duplicates and empty strings
+    aliases = list(set(a.strip() for a in aliases if a.strip() and len(a) > 2))
+    
+    return aliases[:5]  # Max 5 aliases
+
+
+def import_to_sqlite(temp_dir: str, limit: int = None, keep_existing: bool = False):
+    """Import USDA data into SQLite database with new schema."""
     
     # Find the extracted directory
     extracted_dirs = [d for d in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, d))]
-    if not extracted_dirs:
-        # Files might be directly in temp_dir
-        data_dir = temp_dir
-    else:
-        data_dir = os.path.join(temp_dir, extracted_dirs[0])
+    data_dir = os.path.join(temp_dir, extracted_dirs[0]) if extracted_dirs else temp_dir
     
     food_file = os.path.join(data_dir, "food.csv")
     nutrient_file = os.path.join(data_dir, "food_nutrient.csv")
@@ -96,7 +127,7 @@ def import_to_sqlite(temp_dir: str):
     if not os.path.exists(food_file):
         print(f"Error: food.csv not found in {data_dir}")
         print(f"Contents: {os.listdir(data_dir)}")
-        return
+        return 0
     
     # Parse categories
     categories = {}
@@ -110,50 +141,24 @@ def import_to_sqlite(temp_dir: str):
     print("Parsing nutrient data...")
     nutrients = parse_nutrients(nutrient_file)
     
-    # Nutrient IDs we care about:
-    # 1008 = Energy (kcal)
-    # 1003 = Protein
-    # 1005 = Carbohydrates
-    # 1004 = Total Fat
-    # 1079 = Fiber
-    NUTRIENT_ENERGY = 1008
-    NUTRIENT_PROTEIN = 1003
-    NUTRIENT_CARBS = 1005
-    NUTRIENT_FAT = 1004
-    NUTRIENT_FIBER = 1079
+    # Nutrient IDs
+    NUTRIENT_ENERGY = 1008  # kcal per 100g
     
-    # Initialize database
-    DATA_DIR.mkdir(exist_ok=True)
+    # Initialize database with new schema
+    init_food_db()
     
-    # Remove existing database
-    if FOOD_DB_PATH.exists():
-        os.remove(FOOD_DB_PATH)
-    
-    conn = sqlite3.connect(FOOD_DB_PATH)
+    conn = get_food_db_connection()
     cursor = conn.cursor()
     
-    # Create table
-    cursor.execute("""
-        CREATE TABLE foods (
-            id INTEGER PRIMARY KEY,
-            fdc_id INTEGER,
-            name TEXT NOT NULL,
-            brand TEXT,
-            serving_size REAL DEFAULT 100,
-            serving_unit TEXT DEFAULT 'g',
-            calories REAL,
-            protein REAL,
-            carbs REAL,
-            fat REAL,
-            fiber REAL,
-            category TEXT
-        )
-    """)
+    if not keep_existing:
+        print("Clearing existing data...")
+        cursor.execute("DELETE FROM food_aliases")
+        cursor.execute("DELETE FROM foods")
+        conn.commit()
     
-    # Import foods
-    print("Importing foods...")
-    imported = 0
-    skipped = 0
+    # Collect foods with calorie data
+    print("Reading food data...")
+    foods_to_import = []
     
     with open(food_file, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
@@ -165,144 +170,174 @@ def import_to_sqlite(temp_dir: str):
             category_id = row.get('food_category_id', '')
             category = categories.get(int(category_id), None) if category_id else None
             
-            # Get nutrients
+            # Get calories per 100g
             food_nutrients = nutrients.get(fdc_id, {})
-            calories = food_nutrients.get(NUTRIENT_ENERGY, 0)
-            protein = food_nutrients.get(NUTRIENT_PROTEIN)
-            carbs = food_nutrients.get(NUTRIENT_CARBS)
-            fat = food_nutrients.get(NUTRIENT_FAT)
-            fiber = food_nutrients.get(NUTRIENT_FIBER)
+            calories_per_100g = food_nutrients.get(NUTRIENT_ENERGY, 0)
             
             # Skip foods with no calorie data
-            if calories == 0:
-                skipped += 1
+            if calories_per_100g <= 0:
                 continue
             
-            cursor.execute("""
-                INSERT INTO foods (fdc_id, name, serving_size, serving_unit, calories, protein, carbs, fat, fiber, category)
-                VALUES (?, ?, 100, 'g', ?, ?, ?, ?, ?, ?)
-            """, (fdc_id, name, calories, protein, carbs, fat, fiber, category))
+            # Convert to calories per gram
+            calories_per_gram = calories_per_100g / 100.0
             
-            imported += 1
-            if imported % 1000 == 0:
-                print(f"\rImported {imported} foods...", end="", flush=True)
+            foods_to_import.append({
+                'fdc_id': fdc_id,
+                'name': name,
+                'calories_per_unit': calories_per_gram,
+                'category': category,
+            })
     
-    # Create indexes
-    print(f"\nCreating indexes...")
-    cursor.execute("CREATE INDEX idx_food_name ON foods(name)")
-    cursor.execute("CREATE INDEX idx_food_category ON foods(category)")
-    cursor.execute("CREATE INDEX idx_food_fdc_id ON foods(fdc_id)")
+    # Sort by calorie value (foods with more data tend to be more common)
+    # and limit if requested
+    if limit:
+        foods_to_import = foods_to_import[:limit]
+    
+    print(f"Importing {len(foods_to_import)} foods...")
+    
+    imported = 0
+    aliases_added = 0
+    
+    for food in foods_to_import:
+        # Insert food
+        cursor.execute("""
+            INSERT INTO foods (fdc_id, name, calories_per_unit, unit_type, canonical_unit, category)
+            VALUES (?, ?, ?, 'mass', 'g', ?)
+        """, (food['fdc_id'], food['name'], food['calories_per_unit'], food['category']))
+        
+        food_id = cursor.lastrowid
+        
+        # Generate and insert aliases
+        aliases = generate_simple_aliases(food['name'])
+        for alias in aliases:
+            try:
+                cursor.execute("""
+                    INSERT INTO food_aliases (food_id, alias) VALUES (?, ?)
+                """, (food_id, alias))
+                aliases_added += 1
+            except sqlite3.IntegrityError:
+                pass  # Duplicate alias
+        
+        imported += 1
+        if imported % 500 == 0:
+            print(f"\rImported {imported} foods...", end="", flush=True)
+            conn.commit()
     
     conn.commit()
     conn.close()
     
-    print(f"\nImport complete!")
+    print(f"\n\nImport complete!")
     print(f"  - Imported: {imported} foods")
-    print(f"  - Skipped (no calories): {skipped}")
+    print(f"  - Generated: {aliases_added} aliases")
     print(f"  - Database: {FOOD_DB_PATH}")
+    
+    return imported
 
 
 def add_common_foods():
-    """Add some common foods that might be missing or have better names."""
-    conn = sqlite3.connect(FOOD_DB_PATH)
+    """Add common foods with better names and piece-based items."""
+    conn = get_food_db_connection()
     cursor = conn.cursor()
     
-    common_foods = [
-        # name, calories, protein, carbs, fat, category
-        ("Coffee, black", 2, 0.3, 0, 0, "Beverages"),
-        ("Coffee with milk", 20, 1, 2, 0.5, "Beverages"),
-        ("Tea, black", 1, 0, 0, 0, "Beverages"),
-        ("Water", 0, 0, 0, 0, "Beverages"),
-        ("Toast, white bread", 75, 2.5, 14, 1, "Baked Products"),
-        ("Toast, whole wheat", 70, 3.5, 12, 1, "Baked Products"),
-        ("Scrambled eggs (2)", 180, 12, 2, 14, "Dairy and Egg Products"),
-        ("Fried egg", 90, 6, 0.5, 7, "Dairy and Egg Products"),
-        ("Boiled egg", 78, 6, 0.5, 5, "Dairy and Egg Products"),
-        ("Oatmeal, cooked (1 cup)", 150, 5, 27, 3, "Cereal Grains and Pasta"),
-        ("Greek yogurt (1 cup)", 130, 17, 8, 4, "Dairy and Egg Products"),
-        ("Banana, medium", 105, 1.3, 27, 0.4, "Fruits"),
-        ("Apple, medium", 95, 0.5, 25, 0.3, "Fruits"),
-        ("Chicken breast, grilled (100g)", 165, 31, 0, 3.6, "Poultry Products"),
-        ("Salmon, grilled (100g)", 208, 20, 0, 13, "Finfish and Shellfish Products"),
-        ("Rice, white, cooked (1 cup)", 206, 4.3, 45, 0.4, "Cereal Grains and Pasta"),
-        ("Rice, brown, cooked (1 cup)", 216, 5, 45, 1.8, "Cereal Grains and Pasta"),
-        ("Pasta, cooked (1 cup)", 220, 8, 43, 1.3, "Cereal Grains and Pasta"),
-        ("Broccoli, steamed (1 cup)", 55, 3.7, 11, 0.6, "Vegetables"),
-        ("Spinach, raw (1 cup)", 7, 0.9, 1, 0.1, "Vegetables"),
-        ("Avocado, half", 160, 2, 9, 15, "Fruits"),
-        ("Almonds (1 oz)", 164, 6, 6, 14, "Nut and Seed Products"),
-        ("Peanut butter (2 tbsp)", 188, 8, 6, 16, "Legumes"),
+    # Piece-based common foods (calories per piece)
+    piece_foods = [
+        ("Egg (large)", 70, "piece", "breakfast", ["egg", "eggs", "large egg"]),
+        ("Egg (medium)", 60, "piece", "breakfast", ["medium egg"]),
+        ("Banana (medium)", 105, "piece", "fruit", ["banana", "bananas"]),
+        ("Apple (medium)", 95, "piece", "fruit", ["apple", "apples"]),
+        ("Orange (medium)", 62, "piece", "fruit", ["orange", "oranges"]),
+        ("Slice of bread", 75, "piece", "grain", ["bread", "toast", "slice of bread"]),
+        ("Tortilla (flour, 8 inch)", 140, "piece", "grain", ["tortilla", "flour tortilla"]),
+        ("Bagel", 280, "piece", "grain", ["bagel"]),
+        ("English muffin", 130, "piece", "grain", ["english muffin"]),
     ]
     
-    for name, cals, prot, carbs, fat, cat in common_foods:
+    for name, cal, unit, cat, aliases in piece_foods:
         cursor.execute("""
-            INSERT OR IGNORE INTO foods (name, serving_size, serving_unit, calories, protein, carbs, fat, category)
-            VALUES (?, 1, 'serving', ?, ?, ?, ?, ?)
-        """, (name, cals, prot, carbs, fat, cat))
+            INSERT OR IGNORE INTO foods (name, calories_per_unit, unit_type, canonical_unit, category)
+            VALUES (?, ?, 'piece', 'piece', ?)
+        """, (name, cal, cat))
+        
+        food_id = cursor.lastrowid
+        if food_id:
+            for alias in aliases:
+                try:
+                    cursor.execute("INSERT INTO food_aliases (food_id, alias) VALUES (?, ?)", (food_id, alias))
+                except sqlite3.IntegrityError:
+                    pass
+    
+    # Volume-based common foods (calories per ml)
+    volume_foods = [
+        ("Whole milk", 0.63, "ml", "dairy", ["milk", "whole milk"]),
+        ("Skim milk", 0.35, "ml", "dairy", ["skim milk", "nonfat milk"]),
+        ("2% milk", 0.50, "ml", "dairy", ["2% milk", "reduced fat milk"]),
+        ("Orange juice", 0.47, "ml", "beverage", ["orange juice", "oj"]),
+        ("Coffee (black)", 0.01, "ml", "beverage", ["coffee", "black coffee"]),
+        ("Olive oil", 8.84, "ml", "oil", ["olive oil", "oil"]),
+    ]
+    
+    for name, cal, unit, cat, aliases in volume_foods:
+        cursor.execute("""
+            INSERT OR IGNORE INTO foods (name, calories_per_unit, unit_type, canonical_unit, category)
+            VALUES (?, ?, 'volume', 'ml', ?)
+        """, (name, cal, cat))
+        
+        food_id = cursor.lastrowid
+        if food_id:
+            for alias in aliases:
+                try:
+                    cursor.execute("INSERT INTO food_aliases (food_id, alias) VALUES (?, ?)", (food_id, alias))
+                except sqlite3.IntegrityError:
+                    pass
     
     conn.commit()
     conn.close()
-    print(f"Added {len(common_foods)} common food entries")
+    print(f"Added {len(piece_foods) + len(volume_foods)} common food entries with aliases")
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Import USDA food database")
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of foods to import")
+    parser.add_argument("--keep-existing", action="store_true", help="Don't delete existing foods")
+    args = parser.parse_args()
+    
     print("=" * 60)
     print("USDA Food Database Importer")
     print("=" * 60)
     print()
     
+    if args.limit:
+        print(f"Limiting to {args.limit} foods")
+    
     # Check if database already exists
-    if FOOD_DB_PATH.exists():
-        conn = sqlite3.connect(FOOD_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM foods")
-        count = cursor.fetchone()[0]
-        conn.close()
-        
-        if count > 0:
-            print(f"Food database already exists with {count} foods.")
-            response = input("Re-import? This will delete existing data. (y/N): ")
-            if response.lower() != 'y':
-                print("Aborted.")
-                return
+    if FOOD_DB_PATH.exists() and not args.keep_existing:
+        try:
+            conn = get_food_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM foods")
+            count = cursor.fetchone()[0]
+            conn.close()
+            
+            if count > 0:
+                print(f"Food database already exists with {count} foods.")
+                response = input("Re-import? This will delete existing data. (y/N): ")
+                if response.lower() != 'y':
+                    print("Aborted.")
+                    return
+        except:
+            pass
     
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
             download_usda_data(temp_dir)
-            import_to_sqlite(temp_dir)
-            add_common_foods()
+            imported = import_to_sqlite(temp_dir, limit=args.limit, keep_existing=args.keep_existing)
+            if imported > 0:
+                add_common_foods()
         except Exception as e:
             print(f"\nError during import: {e}")
+            import traceback
+            traceback.print_exc()
             print("\nYou can also manually add foods through the web interface.")
-            
-            # Initialize empty database with schema
-            DATA_DIR.mkdir(exist_ok=True)
-            if not FOOD_DB_PATH.exists():
-                conn = sqlite3.connect(FOOD_DB_PATH)
-                cursor = conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS foods (
-                        id INTEGER PRIMARY KEY,
-                        fdc_id INTEGER,
-                        name TEXT NOT NULL,
-                        brand TEXT,
-                        serving_size REAL DEFAULT 100,
-                        serving_unit TEXT DEFAULT 'g',
-                        calories REAL,
-                        protein REAL,
-                        carbs REAL,
-                        fat REAL,
-                        fiber REAL,
-                        category TEXT
-                    )
-                """)
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_food_name ON foods(name)")
-                conn.commit()
-                conn.close()
-                print("Created empty food database. Add foods manually or retry import.")
-            
-            # Add common foods even if USDA import failed
-            add_common_foods()
 
 
 if __name__ == "__main__":

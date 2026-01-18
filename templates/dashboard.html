@@ -444,37 +444,20 @@
                 <input type="text" id="calorieMealName" name="meal_name" required>
             </div>
             
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="calorieAmount">Calories</label>
-                    <input type="number" id="calorieAmount" name="calories" min="0" max="5000" required>
-                </div>
-                <div class="form-group">
-                    <label for="calorieMealType">Meal Type</label>
-                    <select id="calorieMealType" name="meal_type">
-                        <option value="">--</option>
-                        <option value="breakfast">Breakfast</option>
-                        <option value="lunch">Lunch</option>
-                        <option value="dinner">Dinner</option>
-                        <option value="snack">Snack</option>
-                    </select>
+            <div class="form-group">
+                <label for="calorieQuantity">Quantity (e.g., 150g, 2 cups)</label>
+                <div class="form-group-with-btn">
+                    <input type="text" id="calorieQuantity" name="quantity" placeholder="100g">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="computeCalories()">Compute</button>
                 </div>
             </div>
             
-            <div class="form-row macros-row">
-                <div class="form-group">
-                    <label for="calorieProtein">Protein (g)</label>
-                    <input type="number" id="calorieProtein" name="protein" step="0.1" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="calorieCarbs">Carbs (g)</label>
-                    <input type="number" id="calorieCarbs" name="carbs" step="0.1" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="calorieFat">Fat (g)</label>
-                    <input type="number" id="calorieFat" name="fat" step="0.1" min="0">
-                </div>
+            <div class="form-group">
+                <label for="calorieAmount">Calories</label>
+                <input type="number" id="calorieAmount" name="calories" min="0" max="5000">
+                <small class="form-hint">Leave blank to auto-compute from quantity</small>
             </div>
+            <input type="hidden" id="calorieFoodId" name="food_id">
             
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" onclick="saveAsPreset()">Save as Preset</button>
@@ -505,9 +488,7 @@
                 </div>
                 <div class="preset-macros">
                     <span>{{ preset.calories|int }} kcal</span>
-                    {% if preset.protein_g %}<span>P: {{ preset.protein_g|int }}g</span>{% endif %}
-                    {% if preset.carbs_g %}<span>C: {{ preset.carbs_g|int }}g</span>{% endif %}
-                    {% if preset.fat_g %}<span>F: {{ preset.fat_g|int }}g</span>{% endif %}
+                    {% if preset.quantity %}<span>{{ preset.quantity }}</span>{% endif %}
                 </div>
                 <div class="preset-actions">
                     <button class="btn btn-primary btn-sm" onclick="logPreset({{ preset.id }})">Log</button>
@@ -543,20 +524,11 @@
                     </select>
                 </div>
             </div>
-            <div class="form-row macros-row">
-                <div class="form-group">
-                    <label for="presetProtein">Protein (g)</label>
-                    <input type="number" id="presetProtein" name="protein" step="0.1" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="presetCarbs">Carbs (g)</label>
-                    <input type="number" id="presetCarbs" name="carbs" step="0.1" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="presetFat">Fat (g)</label>
-                    <input type="number" id="presetFat" name="fat" step="0.1" min="0">
-                </div>
+            <div class="form-group">
+                <label for="presetQuantity">Quantity (e.g., 150g, 2 cups)</label>
+                <input type="text" id="presetQuantity" name="quantity" placeholder="100g">
             </div>
+            <input type="hidden" id="presetFoodId" name="food_id">
             <button type="submit" class="btn btn-primary">Create Preset</button>
         </form>
     </div>
@@ -695,13 +667,45 @@
     
     function selectFood(food) {
         document.getElementById('calorieMealName').value = food.name;
+        document.getElementById('calorieFoodId').value = food.id;
+        // Set default quantity based on food's serving
+        const qty = food.serving_size + (food.serving_unit || 'g');
+        document.getElementById('calorieQuantity').value = qty;
         document.getElementById('calorieAmount').value = Math.round(food.calories);
-        if (food.protein) document.getElementById('calorieProtein').value = food.protein;
-        if (food.carbs) document.getElementById('calorieCarbs').value = food.carbs;
-        if (food.fat) document.getElementById('calorieFat').value = food.fat;
         
         document.getElementById('foodSearch').value = '';
         document.getElementById('foodSearchResults').style.display = 'none';
+    }
+    
+    async function computeCalories() {
+        const foodId = document.getElementById('calorieFoodId').value;
+        const quantity = document.getElementById('calorieQuantity').value;
+        
+        if (!foodId) {
+            alert('Please select a food first by searching above');
+            return;
+        }
+        if (!quantity) {
+            alert('Please enter a quantity (e.g., 150g, 2 cups)');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/foods/compute', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({food_id: parseInt(foodId), quantity: quantity})
+            });
+            const result = await response.json();
+            
+            if (result.status === 'ok') {
+                document.getElementById('calorieAmount').value = result.calories;
+            } else {
+                alert('Error: ' + result.message);
+            }
+        } catch (err) {
+            alert('Error computing calories: ' + err.message);
+        }
     }
     
     // Calorie entry functions
@@ -758,10 +762,8 @@
         
         document.getElementById('presetName').value = name;
         document.getElementById('presetCalories').value = calories;
-        document.getElementById('presetProtein').value = document.getElementById('calorieProtein').value || '';
-        document.getElementById('presetCarbs').value = document.getElementById('calorieCarbs').value || '';
-        document.getElementById('presetFat').value = document.getElementById('calorieFat').value || '';
-        document.getElementById('presetCategory').value = document.getElementById('calorieMealType').value || '';
+        document.getElementById('presetQuantity').value = document.getElementById('calorieQuantity').value || '';
+        document.getElementById('presetFoodId').value = document.getElementById('calorieFoodId').value || '';
         
         closeModal('calorieModal');
         openModal('presetModal');
@@ -788,9 +790,67 @@
         submitForm('/api/workout', 'workoutForm', 'workoutModal');
     });
     
-    document.getElementById('calorieForm').addEventListener('submit', function(e) {
+    document.getElementById('calorieForm').addEventListener('submit', async function(e) {
         e.preventDefault();
-        submitForm('/api/calories', 'calorieForm', 'calorieModal');
+        
+        const mealName = document.getElementById('calorieMealName').value;
+        const foodId = document.getElementById('calorieFoodId').value;
+        const quantity = document.getElementById('calorieQuantity').value;
+        let calories = document.getElementById('calorieAmount').value;
+        const date = document.getElementById('calorieDate').value;
+        
+        // If no calories entered but we have food_id and quantity, compute calories
+        if (!calories && foodId && quantity) {
+            try {
+                const response = await fetch('/api/foods/compute', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({food_id: parseInt(foodId), quantity: quantity})
+                });
+                const result = await response.json();
+                
+                if (result.status === 'ok') {
+                    calories = result.calories;
+                    document.getElementById('calorieAmount').value = calories;
+                } else {
+                    alert('Error computing calories: ' + result.message);
+                    return;
+                }
+            } catch (err) {
+                alert('Error computing calories: ' + err.message);
+                return;
+            }
+        }
+        
+        if (!calories) {
+            alert('Please enter calories or select a food with quantity to compute');
+            return;
+        }
+        
+        // Submit the entry
+        try {
+            const response = await fetch('/api/calories', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    date: date,
+                    meal_name: mealName,
+                    calories: parseFloat(calories),
+                    quantity: quantity || null,
+                    food_id: foodId ? parseInt(foodId) : null
+                })
+            });
+            
+            const result = await response.json();
+            if (result.status === 'ok') {
+                closeModal('calorieModal');
+                location.reload();
+            } else {
+                alert('Error: ' + result.message);
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
     });
     
     document.getElementById('presetForm').addEventListener('submit', function(e) {
