@@ -135,21 +135,21 @@ def cmd_add_food(params: dict) -> CommandResult:
 
 def cmd_log_weight(params: dict) -> CommandResult:
     """Log weight entry."""
-    weight_kg = params.get("weight_kg")
+    weight_lbs = params.get("weight_lbs")
     
-    if not weight_kg:
+    if not weight_lbs:
         return CommandResult(False, "I didn't catch your weight.")
     
     try:
         response = _api_post("/api/weight", {
             "date": date.today().isoformat(),
-            "weight_kg": round(weight_kg, 1),
+            "weight_lbs": round(weight_lbs, 1),
         })
         
         if response.status_code == 200:
             result = response.json()
             warnings = result.get("warnings", [])
-            msg = f"Logged weight as {round(weight_kg, 1)} kilograms"
+            msg = f"Logged weight as {round(weight_lbs, 1)} pounds"
             if warnings:
                 msg += f". Warning: {warnings[0]}"
             return CommandResult(True, msg, result)

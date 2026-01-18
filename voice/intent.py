@@ -33,8 +33,9 @@ def load_custom_metric_patterns():
             for m in metrics:
                 keyword = m.get("voice_keyword")
                 if keyword:
-                    # Create pattern: keyword followed by number
-                    # e.g., "medication 2" or "medication, 2"
+                    # Create pattern: keyword followed by number, ignoring trailing text
+                    # e.g., "medication 2", "medication, 2", "vitamin d, 3 kilograms"
+                    # The pattern captures the number and ignores anything after
                     pattern = rf"{re.escape(keyword.lower())}\s*,?\s*(\d+(?:\.\d+)?)"
                     _custom_metric_patterns.append({
                         "id": m["id"],
@@ -228,9 +229,13 @@ def parse_custom_metrics(text: str) -> Optional[ParsedIntent]:
     
     if DEBUG:
         print(f"[Intent] Checking {len(_custom_metric_patterns)} custom patterns against: '{processed}'")
+        for m in _custom_metric_patterns:
+            print(f"[Intent]   Pattern '{m['keyword']}': {m['pattern']}")
     
     for metric in _custom_metric_patterns:
         match = re.search(metric["pattern"], processed)
+        if DEBUG and not match:
+            print(f"[Intent]   No match for '{metric['keyword']}'")
         if match:
             value = float(match.group(1))
             if DEBUG:
@@ -257,14 +262,14 @@ def reload_custom_patterns():
 
 
 # Unit conversion helpers
-def convert_weight_to_kg(value: float, unit: str) -> float:
-    """Convert weight to kilograms."""
-    unit = unit.lower() if unit else "kg"
-    if unit in ("lb", "lbs", "pound", "pounds"):
-        return value * 0.453592
-    elif unit in ("kg", "kilo", "kilos", "kilogram", "kilograms"):
+def convert_weight_to_lbs(value: float, unit: str) -> float:
+    """Convert weight to pounds."""
+    unit = unit.lower() if unit else "lbs"
+    if unit in ("kg", "kilo", "kilos", "kilogram", "kilograms"):
+        return value * 2.20462
+    elif unit in ("lb", "lbs", "pound", "pounds"):
         return value
-    return value  # Assume kg if unknown
+    return value  # Assume lbs if unknown
 
 
 def convert_to_grams(value: float, unit: str) -> float:
@@ -319,12 +324,12 @@ PATTERNS = [
     (
         r"(?:my\s+)?weight\s+(?:is\s+|was\s+|today\s+)?(\d+(?:\.\d+)?)\s*(kg|lbs?|pounds?|kilos?)?",
         "log_weight",
-        lambda m: {"weight_kg": convert_weight_to_kg(float(m.group(1)), m.group(2))}
+        lambda m: {"weight_lbs": convert_weight_to_lbs(float(m.group(1)), m.group(2))}
     ),
     (
         r"(?:i\s+)?weigh(?:ed)?\s+(\d+(?:\.\d+)?)\s*(kg|lbs?|pounds?|kilos?)?",
         "log_weight",
-        lambda m: {"weight_kg": convert_weight_to_kg(float(m.group(1)), m.group(2))}
+        lambda m: {"weight_lbs": convert_weight_to_lbs(float(m.group(1)), m.group(2))}
     ),
     
     # Sleep - with fractions: "8 hours", "7 and a half hours", "6.5 hours"
@@ -483,7 +488,7 @@ Respond with ONLY a JSON object, no other text:
 
 Examples:
 - "had 500 calories" -> {{"intent": "add_calories", "params": {{"calories": 500}}}}
-- "I weigh 180 pounds" -> {{"intent": "log_weight", "params": {{"weight_kg": 81.6}}}}
+- "I weigh 180 pounds" -> {{"intent": "log_weight", "params": {{"weight_lbs": 180}}}}
 - "slept 8 hours" -> {{"intent": "log_sleep", "params": {{"hours": 8}}}}
 
 JSON:"""

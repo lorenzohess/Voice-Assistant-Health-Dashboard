@@ -55,10 +55,11 @@ Log food by quantity (requires food in database):
 
 ### Weight
 
-- "My weight is 75 kilos"
-- "I weigh 70 kg"
-- Has issues: "Weight 165 pounds"
-- Has issues: "Weighed 150 lbs"
+- "My weight is 165 pounds"
+- "I weigh 180 lbs"
+- "Weight 175 pounds"
+- "Weighed 170 lbs"
+- "My weight is 75 kilos" (converts to lbs)
 
 ### Sleep
 

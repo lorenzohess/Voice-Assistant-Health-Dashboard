@@ -17,24 +17,24 @@ class ValidationResult:
     warning_message: Optional[str] = None
 
 
-def validate_weight(weight_kg: float, entry_date: date) -> ValidationResult:
+def validate_weight(weight_lbs: float, entry_date: date) -> ValidationResult:
     """
     Validate weight entry.
-    Hard limits: 20-200 kg
-    Warning: Change > 5 kg from previous entry
+    Hard limits: 50-500 lbs
+    Warning: Change > 10 lbs from previous entry
     """
     # Hard limits
-    if weight_kg < 20:
+    if weight_lbs < 50:
         return ValidationResult(
             is_valid=False,
             has_warning=False,
-            error_message="Weight must be at least 20 kg"
+            error_message="Weight must be at least 50 lbs"
         )
-    if weight_kg > 200:
+    if weight_lbs > 500:
         return ValidationResult(
             is_valid=False,
             has_warning=False,
-            error_message="Weight must be at most 200 kg"
+            error_message="Weight must be at most 500 lbs"
         )
     
     # Check for large change from previous entry
@@ -42,11 +42,11 @@ def validate_weight(weight_kg: float, entry_date: date) -> ValidationResult:
         WeightEntry.date < entry_date
     ).order_by(WeightEntry.date.desc()).first()
     
-    if previous and abs(weight_kg - previous.weight_kg) > 5:
+    if previous and abs(weight_lbs - previous.weight_kg) > 10:  # Column stores lbs
         return ValidationResult(
             is_valid=True,
             has_warning=True,
-            warning_message=f"Large change detected: {abs(weight_kg - previous.weight_kg):.1f} kg from previous ({previous.weight_kg} kg)"
+            warning_message=f"Large change detected: {abs(weight_lbs - previous.weight_kg):.1f} lbs from previous ({previous.weight_kg} lbs)"
         )
     
     return ValidationResult(is_valid=True, has_warning=False)

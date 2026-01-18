@@ -141,7 +141,7 @@ def add_sample_data():
         db.session.commit()
         
         today = date.today()
-        base_weight = 75.0
+        base_weight = 165.0  # Base weight in lbs
         
         workout_types = ["Running", "Weights", "Yoga", "Swimming", "Cycling", "HIIT"]
         
@@ -149,8 +149,8 @@ def add_sample_data():
             entry_date = today - timedelta(days=i)
             
             # Weight: gradual decrease with some noise
-            weight = base_weight - (60 - i) * 0.03 + random.uniform(-0.5, 0.5)
-            weight_entry = WeightEntry(date=entry_date, weight_kg=round(weight, 1))
+            weight = base_weight - (60 - i) * 0.05 + random.uniform(-1.0, 1.0)  # Variation in lbs
+            weight_entry = WeightEntry(date=entry_date, weight_kg=round(weight, 1))  # Stores lbs despite column name
             db.session.add(weight_entry)
             
             # Sleep: 6-9 hours with some variation

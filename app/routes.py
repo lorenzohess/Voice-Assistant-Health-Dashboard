@@ -153,10 +153,10 @@ def dashboard():
         WorkoutEntry.date <= end_date
     ).order_by(WorkoutEntry.date).all()
     
-    # Prepare chart data
+    # Prepare chart data (stored as kg internally, display as lbs)
     weight_dates = [e.date.isoformat() for e in weight_entries]
-    weight_values = [e.weight_kg for e in weight_entries]
-    weight_chart = create_line_chart(weight_dates, weight_values, "Weight", "kg", "#3b82f6")
+    weight_values = [e.weight_kg for e in weight_entries]  # Now stored as lbs despite column name
+    weight_chart = create_line_chart(weight_dates, weight_values, "Weight", "lbs", "#3b82f6")
     weight_metrics = calculate_metrics(weight_values)
     
     sleep_dates = [e.date.isoformat() for e in sleep_entries]
@@ -252,6 +252,7 @@ def dashboard():
             "unit": metric.unit,
             "chart_type": metric.chart_type,
             "color": metric.color,
+            "voice_keyword": metric.voice_keyword,
             "chart_json": chart_json,
             "metrics": metrics_data,
         })
@@ -288,15 +289,16 @@ def add_weight():
     data = request.get_json()
     
     entry_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
-    weight_kg = float(data["weight_kg"])
+    # Accept weight_lbs (preferred) or weight_kg for backwards compatibility
+    weight_lbs = float(data.get("weight_lbs") or data.get("weight_kg", 0))
     
     # Check for existing entry on this date
     existing = WeightEntry.query.filter_by(date=entry_date).first()
     if existing:
-        existing.weight_kg = weight_kg
+        existing.weight_kg = weight_lbs  # Column stores lbs despite name
         existing.created_at = datetime.utcnow()  # Update timestamp for auto-refresh
     else:
-        entry = WeightEntry(date=entry_date, weight_kg=weight_kg)
+        entry = WeightEntry(date=entry_date, weight_kg=weight_lbs)  # Column stores lbs
         db.session.add(entry)
     
     db.session.commit()
@@ -757,9 +759,14 @@ def update_custom_metric(metric_id):
     metric.unit = data.get("unit", metric.unit)
     metric.chart_type = data.get("chart_type", metric.chart_type)
     metric.color = data.get("color", metric.color)
+    metric.voice_keyword = data.get("voice_keyword", metric.voice_keyword)
+    
+    # Allow clearing the voice keyword with empty string or null
+    if "voice_keyword" in data and not data["voice_keyword"]:
+        metric.voice_keyword = None
     
     db.session.commit()
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "metric": metric.to_dict()})
 
 
 @main_bp.route("/api/custom-metrics/<int:metric_id>", methods=["DELETE"])
