@@ -1,6 +1,7 @@
 """Scheduler for alarm using APScheduler."""
 
 import json
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -15,6 +16,10 @@ _scheduler: Optional[BackgroundScheduler] = None
 
 # Job ID for the alarm
 ALARM_JOB_ID = "morning_alarm"
+CONFIG_CHECK_JOB_ID = "config_check"
+
+# Track config file modification time
+_last_config_mtime: float = 0
 
 
 def load_config() -> dict:
@@ -114,16 +119,49 @@ def reload_schedule() -> bool:
     return True
 
 
+def _check_config_changed():
+    """Check if config file has changed and reload if needed."""
+    global _last_config_mtime
+    
+    try:
+        if not CONFIG_FILE.exists():
+            return
+        
+        current_mtime = os.path.getmtime(CONFIG_FILE)
+        if current_mtime > _last_config_mtime:
+            print("[Alarm] Config file changed, reloading schedule...")
+            _last_config_mtime = current_mtime
+            reload_schedule()
+    except Exception as e:
+        print(f"[Alarm] Error checking config: {e}")
+
+
 def start_scheduler():
     """Start the scheduler."""
+    global _last_config_mtime
+    
     scheduler = get_scheduler()
     
     if scheduler.running:
         return
     
+    # Record initial config mtime
+    if CONFIG_FILE.exists():
+        _last_config_mtime = os.path.getmtime(CONFIG_FILE)
+    
     reload_schedule()
+    
+    # Add periodic config check (every 10 seconds)
+    scheduler.add_job(
+        _check_config_changed,
+        'interval',
+        seconds=10,
+        id=CONFIG_CHECK_JOB_ID,
+        replace_existing=True
+    )
+    
     scheduler.start()
-    print("[Alarm] Scheduler started")
+    print("[Alarm] Scheduler started (config auto-reload enabled)")
 
 
 def stop_scheduler():
