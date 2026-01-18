@@ -584,6 +584,21 @@ def log_preset(preset_id):
 
 # --- System Control API ---
 
+@main_bp.route("/api/volume/set", methods=["POST"])
+def set_volume():
+    """Set system volume level (0-100)."""
+    import subprocess
+    data = request.get_json()
+    volume = data.get("volume", 50)
+    volume = max(0, min(100, int(volume)))
+    
+    try:
+        subprocess.run(["amixer", "set", "Master", f"{volume}%"], check=True, capture_output=True)
+        return jsonify({"status": "ok", "volume": volume})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @main_bp.route("/api/volume/toggle", methods=["POST"])
 def toggle_volume():
     """Toggle system volume mute state."""
@@ -603,14 +618,20 @@ def toggle_volume():
 
 @main_bp.route("/api/volume/state", methods=["GET"])
 def get_volume_state():
-    """Get current volume mute state."""
+    """Get current volume level and mute state."""
     import subprocess
+    import re
     try:
         result = subprocess.run(["amixer", "get", "Master"], capture_output=True, text=True)
         muted = "[off]" in result.stdout
-        return jsonify({"muted": muted})
+        
+        # Parse volume percentage, e.g., "Playback 42598 [65%] [on]"
+        match = re.search(r'\[(\d+)%\]', result.stdout)
+        volume = int(match.group(1)) if match else 65
+        
+        return jsonify({"volume": volume, "muted": muted})
     except:
-        return jsonify({"muted": False})
+        return jsonify({"volume": 65, "muted": False})
 
 
 @main_bp.route("/api/sample-data", methods=["POST"])

@@ -6,9 +6,6 @@
     
     <div class="header-controls">
         <div class="control-buttons">
-            <button class="btn btn-icon" id="volumeToggle" onclick="toggleVolume()" title="Toggle Volume">
-                <span id="volumeIcon">🔊</span>
-            </button>
             <button class="btn btn-icon" onclick="clearDisplayData()" title="Clear Display">
                 🗑️
             </button>
@@ -27,6 +24,8 @@
     </div>
 </div>
 
+<div class="dashboard-layout">
+<div class="dashboard-main">
 <div class="dashboard-grid">
     <!-- Weight Card -->
     <div class="card">
@@ -172,11 +171,68 @@
         </div>
     </div>
     
-    <!-- Pool Schedule Card -->
-    <div class="card pool-card">
+    <!-- Custom Metric Cards -->
+    {% for cm in custom_charts %}
+    <div class="card custom-metric-card" data-metric-id="{{ cm.id }}">
         <div class="card-header">
-            <h2>Pool Schedule</h2>
-            <button class="btn btn-secondary btn-sm" onclick="openModal('poolScheduleModal')">Full Schedule</button>
+            <h2>{{ cm.name }}</h2>
+            <div class="card-actions">
+                <button class="btn btn-primary btn-sm" onclick="openAddCustomEntryModal({{ cm.id }}, '{{ cm.name }}', '{{ cm.unit }}')">+ Add</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteCustomMetric({{ cm.id }}, '{{ cm.name }}')">×</button>
+            </div>
+        </div>
+        <div class="chart" id="custom-chart-{{ cm.id }}"></div>
+        <div class="metrics-row">
+            <div class="metric">
+                <span class="metric-value">{{ "%.1f"|format(cm.metrics.latest) if cm.metrics.latest is not none else "—" }}</span>
+                <span class="metric-label">Latest ({{ cm.unit }})</span>
+            </div>
+            <div class="metric">
+                <span class="metric-value">{{ "%.1f"|format(cm.metrics.average) if cm.metrics.average is not none else "—" }}</span>
+                <span class="metric-label">Avg</span>
+            </div>
+            <div class="metric">
+                <span class="metric-value">{{ cm.metrics.count }}</span>
+                <span class="metric-label">Entries</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Add New Metric Card -->
+    <div class="card add-metric-card" onclick="openModal('addMetricModal')">
+        <div class="add-metric-content">
+            <div class="add-icon">+</div>
+            <span>Add New Graph</span>
+        </div>
+    </div>
+</div><!-- end dashboard-grid -->
+</div><!-- end dashboard-main -->
+
+<!-- Right Sidebar -->
+<aside class="dashboard-sidebar">
+    <!-- Date & Time Panel -->
+    <div class="sidebar-panel datetime-panel">
+        <div class="day-of-week" id="dayOfWeek"></div>
+        <div class="date-iso" id="dateIso"></div>
+        <div class="time-clock" id="timeClock"></div>
+    </div>
+    
+    <!-- Volume Control -->
+    <div class="sidebar-panel volume-panel">
+        <div class="volume-header">
+            <span class="volume-icon" id="volumeIcon">🔊</span>
+            <span class="volume-label">Volume</span>
+            <span class="volume-value" id="volumeValue">65%</span>
+        </div>
+        <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="65" oninput="updateVolume(this.value)">
+    </div>
+    
+    <!-- Pool Schedule -->
+    <div class="sidebar-panel pool-panel">
+        <div class="panel-header">
+            <h3>Pool Schedule</h3>
+            <button class="btn btn-link" onclick="openModal('poolScheduleModal')">Full</button>
         </div>
         
         <div class="pool-status">
@@ -221,43 +277,8 @@
         </div>
         {% endif %}
     </div>
-
-    <!-- Custom Metric Cards -->
-    {% for cm in custom_charts %}
-    <div class="card custom-metric-card" data-metric-id="{{ cm.id }}">
-        <div class="card-header">
-            <h2>{{ cm.name }}</h2>
-            <div class="card-actions">
-                <button class="btn btn-primary btn-sm" onclick="openAddCustomEntryModal({{ cm.id }}, '{{ cm.name }}', '{{ cm.unit }}')">+ Add</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteCustomMetric({{ cm.id }}, '{{ cm.name }}')">×</button>
-            </div>
-        </div>
-        <div class="chart" id="custom-chart-{{ cm.id }}"></div>
-        <div class="metrics-row">
-            <div class="metric">
-                <span class="metric-value">{{ "%.1f"|format(cm.metrics.latest) if cm.metrics.latest is not none else "—" }}</span>
-                <span class="metric-label">Latest ({{ cm.unit }})</span>
-            </div>
-            <div class="metric">
-                <span class="metric-value">{{ "%.1f"|format(cm.metrics.average) if cm.metrics.average is not none else "—" }}</span>
-                <span class="metric-label">Avg</span>
-            </div>
-            <div class="metric">
-                <span class="metric-value">{{ cm.metrics.count }}</span>
-                <span class="metric-label">Entries</span>
-            </div>
-        </div>
-    </div>
-    {% endfor %}
-
-    <!-- Add New Metric Card -->
-    <div class="card add-metric-card" onclick="openModal('addMetricModal')">
-        <div class="add-metric-content">
-            <div class="add-icon">+</div>
-            <span>Add New Graph</span>
-        </div>
-    </div>
-</div><!-- end dashboard-grid -->
+</aside>
+</div><!-- end dashboard-layout -->
 
 <!-- Add Custom Metric Modal -->
 <div class="modal" id="addMetricModal">
@@ -1055,33 +1076,80 @@
         }
     }
     
-    // --- Volume Control ---
-    let isMuted = false;
+    // --- Date & Time Display ---
+    function updateDateTime() {
+        const now = new Date();
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        
+        // Day of week
+        document.getElementById('dayOfWeek').textContent = days[now.getDay()];
+        
+        // ISO 8601 date: YYYY-MM-DD
+        const isoDate = now.toISOString().split('T')[0];
+        document.getElementById('dateIso').textContent = isoDate;
+        
+        // Time: HH:MM
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        document.getElementById('timeClock').textContent = `${hours}:${minutes}`;
+    }
     
-    async function toggleVolume() {
-        try {
-            const response = await fetch('/api/volume/toggle', { method: 'POST' });
-            const result = await response.json();
-            isMuted = result.muted;
-            document.getElementById('volumeIcon').textContent = isMuted ? '🔇' : '🔊';
-        } catch (error) {
-            console.error('Volume toggle failed:', error);
+    // Update immediately and then every minute
+    updateDateTime();
+    setInterval(updateDateTime, 60000);
+    
+    // --- Volume Control ---
+    let currentVolume = 65;
+    
+    function updateVolumeUI(value) {
+        currentVolume = parseInt(value);
+        document.getElementById('volumeValue').textContent = currentVolume + '%';
+        
+        // Update slider track fill
+        const slider = document.getElementById('volumeSlider');
+        slider.style.background = `linear-gradient(to right, var(--accent-blue) 0%, var(--accent-blue) ${currentVolume}%, var(--bg-secondary) ${currentVolume}%, var(--bg-secondary) 100%)`;
+        
+        // Update icon based on level
+        const icon = document.getElementById('volumeIcon');
+        if (currentVolume === 0) {
+            icon.textContent = '🔇';
+        } else if (currentVolume < 33) {
+            icon.textContent = '🔈';
+        } else if (currentVolume < 66) {
+            icon.textContent = '🔉';
+        } else {
+            icon.textContent = '🔊';
         }
     }
     
-    async function checkVolumeState() {
+    async function updateVolume(value) {
+        updateVolumeUI(value);
+        
+        try {
+            await fetch('/api/volume/set', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ volume: currentVolume })
+            });
+        } catch (error) {
+            console.error('Volume set failed:', error);
+        }
+    }
+    
+    async function getVolumeState() {
         try {
             const response = await fetch('/api/volume/state');
             const result = await response.json();
-            isMuted = result.muted;
-            document.getElementById('volumeIcon').textContent = isMuted ? '🔇' : '🔊';
+            currentVolume = result.volume || 65;
+            document.getElementById('volumeSlider').value = currentVolume;
+            updateVolumeUI(currentVolume);
         } catch (error) {
             console.error('Volume state check failed:', error);
         }
     }
     
-    // Check initial volume state
-    checkVolumeState();
+    // Get initial volume state
+    getVolumeState();
     
     // --- Clear Display Data ---
     function clearDisplayData() {
