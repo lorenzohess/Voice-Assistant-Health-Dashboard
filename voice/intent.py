@@ -51,43 +51,6 @@ def load_custom_metric_patterns():
             print(f"[Intent] Failed to load custom metric patterns: {e}")
 
 
-def parse_custom_metrics(text: str) -> Optional[ParsedIntent]:
-    """Check text against custom metric voice patterns."""
-    global _patterns_loaded
-    
-    # Load patterns if not already loaded
-    if not _patterns_loaded:
-        load_custom_metric_patterns()
-    
-    text_lower = text.lower()
-    
-    for metric in _custom_metric_patterns:
-        match = re.search(metric["pattern"], text_lower)
-        if match:
-            value = float(match.group(1))
-            if DEBUG:
-                print(f"[Intent] Custom metric match: {metric['name']} -> {value}")
-            return ParsedIntent(
-                intent="log_custom_metric",
-                params={
-                    "metric_id": metric["id"],
-                    "metric_name": metric["name"],
-                    "value": value,
-                },
-                raw_text=text,
-                confidence=1.0,
-            )
-    
-    return None
-
-
-def reload_custom_patterns():
-    """Force reload of custom metric patterns."""
-    global _patterns_loaded
-    _patterns_loaded = False
-    load_custom_metric_patterns()
-
-
 @dataclass
 class ParsedIntent:
     """Parsed intent from user speech."""
@@ -243,6 +206,54 @@ def preprocess_text(text: str) -> str:
         result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
     
     return result
+
+
+# Custom metric pattern matching (uses preprocess_text, so must be defined after it)
+
+def parse_custom_metrics(text: str) -> Optional[ParsedIntent]:
+    """Check text against custom metric voice patterns."""
+    global _patterns_loaded
+    
+    # Load patterns if not already loaded
+    if not _patterns_loaded:
+        load_custom_metric_patterns()
+    
+    if not _custom_metric_patterns:
+        if DEBUG:
+            print(f"[Intent] No custom metric patterns loaded")
+        return None
+    
+    # Preprocess to convert word numbers to digits (e.g., "one" -> "1")
+    processed = preprocess_text(text)
+    
+    if DEBUG:
+        print(f"[Intent] Checking {len(_custom_metric_patterns)} custom patterns against: '{processed}'")
+    
+    for metric in _custom_metric_patterns:
+        match = re.search(metric["pattern"], processed)
+        if match:
+            value = float(match.group(1))
+            if DEBUG:
+                print(f"[Intent] Custom metric match: {metric['name']} -> {value}")
+            return ParsedIntent(
+                intent="log_custom_metric",
+                params={
+                    "metric_id": metric["id"],
+                    "metric_name": metric["name"],
+                    "value": value,
+                },
+                raw_text=text,
+                confidence=1.0,
+            )
+    
+    return None
+
+
+def reload_custom_patterns():
+    """Force reload of custom metric patterns."""
+    global _patterns_loaded
+    _patterns_loaded = False
+    load_custom_metric_patterns()
 
 
 # Unit conversion helpers
