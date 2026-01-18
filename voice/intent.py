@@ -215,9 +215,8 @@ def parse_custom_metrics(text: str) -> Optional[ParsedIntent]:
     """Check text against custom metric voice patterns."""
     global _patterns_loaded
     
-    # Load patterns if not already loaded
-    if not _patterns_loaded:
-        load_custom_metric_patterns()
+    # Always reload patterns to pick up changes from the web UI
+    load_custom_metric_patterns()
     
     if not _custom_metric_patterns:
         if DEBUG:
@@ -230,12 +229,15 @@ def parse_custom_metrics(text: str) -> Optional[ParsedIntent]:
     if DEBUG:
         print(f"[Intent] Checking {len(_custom_metric_patterns)} custom patterns against: '{processed}'")
         for m in _custom_metric_patterns:
-            print(f"[Intent]   Pattern '{m['keyword']}': {m['pattern']}")
+            print(f"[Intent]   - '{m['keyword']}' -> {m['pattern']}")
     
     for metric in _custom_metric_patterns:
         match = re.search(metric["pattern"], processed)
-        if DEBUG and not match:
-            print(f"[Intent]   No match for '{metric['keyword']}'")
+        if DEBUG:
+            if match:
+                print(f"[Intent]   MATCH '{metric['keyword']}': captured '{match.group(1)}'")
+            else:
+                print(f"[Intent]   no match for '{metric['keyword']}'")
         if match:
             value = float(match.group(1))
             if DEBUG:
