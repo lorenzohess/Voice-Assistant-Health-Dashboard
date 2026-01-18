@@ -26,3 +26,10 @@ requests>=2.31.0
 
 # For CSV export
 # (csv is built-in, no extra package needed)
+
+vosk==0.3.45
+pyaudio==0.2.14
+openwakeword==0.6.0
+piper-tts==1.2.0
+sounddevice==0.4.6
+numpy==1.26.4

@@ -1,0 +1,19 @@
+[Unit]
+Description=Health Dashboard Voice Assistant
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=pi2
+WorkingDirectory=/home/pi2/health-dashboard
+ExecStart=/home/pi2/health-dashboard/venv/bin/python -m voice.main
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=HEALTH_API_URL=http://localhost:5000
+
+# Audio access
+SupplementaryGroups=audio
+
+[Install]
+WantedBy=multi-user.target
