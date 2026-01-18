@@ -16,10 +16,6 @@ ENV/
 *.swo
 *~
 
-# Project specific
-data/*.db
-!data/.gitkeep
-
 # OS
 .DS_Store
 Thumbs.db

@@ -83,7 +83,7 @@ def main():
                     continue
                 
                 # Acknowledge wake word
-                speak("Yes?")
+                speak("Yes!")
             
             # Listen and transcribe
             text = listener.listen_and_transcribe()

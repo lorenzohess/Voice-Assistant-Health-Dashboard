@@ -19,7 +19,7 @@ class TextToSpeech:
     
     # Common phrases to precompute
     COMMON_PHRASES = [
-        "Yes?",
+        "Yes!",  # Exclamation often sounds clearer than question
         "Sorry, I didn't understand that.",
         "An error occurred.",
         "Cannot connect to dashboard server.",
@@ -29,7 +29,9 @@ class TextToSpeech:
     
     def __init__(self, model_path: str = None, precompute: bool = True):
         self.model_path = model_path or PIPER_MODEL_PATH
+        self.sample_rate = 22050  # Default, will be updated from config
         self._verify_model()
+        self._load_config()
         self._cache = {}
         
         if precompute:
@@ -45,11 +47,30 @@ class TextToSpeech:
         if not json_file.exists():
             raise FileNotFoundError(f"Piper config not found: {json_file}")
     
+    def _load_config(self):
+        """Load sample rate from model config."""
+        import json
+        json_file = Path(self.model_path).with_suffix(".onnx.json")
+        try:
+            with open(json_file, 'r') as f:
+                config = json.load(f)
+                self.sample_rate = config.get("audio", {}).get("sample_rate", 22050)
+                if DEBUG:
+                    print(f"[TTS] Model sample rate: {self.sample_rate}")
+        except Exception as e:
+            if DEBUG:
+                print(f"[TTS] Could not load config, using default sample rate: {e}")
+    
     def _get_cache_path(self, text: str) -> Path:
-        """Get cache file path for a phrase."""
-        # Simple hash for filename
+        """Get cache file path for a phrase.
+        
+        Includes model name in hash so switching voices auto-regenerates cache.
+        """
         import hashlib
-        text_hash = hashlib.md5(text.encode()).hexdigest()[:12]
+        # Include model path in hash so different voices have different caches
+        model_name = Path(self.model_path).stem
+        cache_key = f"{model_name}:{text}"
+        text_hash = hashlib.md5(cache_key.encode()).hexdigest()[:16]
         return CACHE_DIR / f"{text_hash}.wav"
     
     def _precompute_common(self):
@@ -100,7 +121,7 @@ class TextToSpeech:
         # Synthesize on the fly
         try:
             process = subprocess.Popen(
-                f'echo "{text}" | piper --model {self.model_path} --output-raw | aplay -r 22050 -f S16_LE -t raw -',
+                f'echo "{text}" | piper --model {self.model_path} --output-raw | aplay -r {self.sample_rate} -f S16_LE -t raw -',
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
@@ -145,7 +166,7 @@ class TextToSpeech:
             )
         
         return subprocess.Popen(
-            f'echo "{text}" | piper --model {self.model_path} --output-raw | aplay -r 22050 -f S16_LE -t raw -',
+            f'echo "{text}" | piper --model {self.model_path} --output-raw | aplay -r {self.sample_rate} -f S16_LE -t raw -',
             shell=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
