@@ -202,12 +202,16 @@ def cmd_log_wake(params: dict) -> CommandResult:
     hour = params.get("hour", 7)
     minute = params.get("minute", 0)
     
+    # Handle 12-hour to 24-hour conversion edge case
+    if hour == 12 and params.get("am"):
+        hour = 0  # 12 AM = midnight
+    
     wake_time = f"{hour:02d}:{minute:02d}:00"
     
     try:
         response = _api_post("/api/wake", {
             "date": date.today().isoformat(),
-            "time": wake_time,
+            "wake_time": wake_time,  # API expects 'wake_time' not 'time'
         })
         
         if response.status_code == 200:

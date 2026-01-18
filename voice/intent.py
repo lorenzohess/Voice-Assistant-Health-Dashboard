@@ -28,6 +28,22 @@ WORD_NUMBERS = {
     "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30,
     "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
     "eighty": 80, "ninety": 90, "hundred": 100, "thousand": 1000,
+    # Fractions for sleep
+    "half": 0.5, "quarter": 0.25,
+}
+
+# Time words for wake time (e.g., "seven thirty" = 7:30)
+TIME_MINUTES = {
+    "oh one": 1, "oh two": 2, "oh three": 3, "oh four": 4, "oh five": 5,
+    "oh six": 6, "oh seven": 7, "oh eight": 8, "oh nine": 9,
+    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+    "twenty": 20, "twenty one": 21, "twenty two": 22, "twenty three": 23,
+    "twenty four": 24, "twenty five": 25, "twenty six": 26, "twenty seven": 27,
+    "twenty eight": 28, "twenty nine": 29, "thirty": 30, "thirty one": 31,
+    "thirty two": 32, "thirty three": 33, "thirty four": 34, "thirty five": 35,
+    "thirty six": 36, "thirty seven": 37, "thirty eight": 38, "thirty nine": 39,
+    "forty": 40, "forty five": 45, "fifty": 50, "fifty five": 55,
 }
 
 
@@ -157,11 +173,31 @@ PATTERNS = [
         lambda m: {"weight_kg": convert_weight_to_kg(float(m.group(1)), m.group(2))}
     ),
     
-    # Sleep
+    # Sleep - with fractions: "8 hours", "7 and a half hours", "6.5 hours"
+    (
+        r"(?:i\s+)?slept\s+(\d+)\s+and\s+a\s+half\s*(?:hours?)?",
+        "log_sleep",
+        lambda m: {"hours": float(m.group(1)) + 0.5}
+    ),
+    (
+        r"(?:i\s+)?slept\s+(\d+)\s+and\s+a\s+quarter\s*(?:hours?)?",
+        "log_sleep",
+        lambda m: {"hours": float(m.group(1)) + 0.25}
+    ),
+    (
+        r"(?:i\s+)?slept\s+(\d+)\s+and\s+three\s+quarters?\s*(?:hours?)?",
+        "log_sleep",
+        lambda m: {"hours": float(m.group(1)) + 0.75}
+    ),
     (
         r"(?:i\s+)?slept\s+(\d+(?:\.\d+)?)\s*(?:hours?)?",
         "log_sleep",
         lambda m: {"hours": float(m.group(1))}
+    ),
+    (
+        r"(?:got\s+)?(\d+)\s+and\s+a\s+half\s*(?:hours?\s+)?(?:of\s+)?sleep",
+        "log_sleep",
+        lambda m: {"hours": float(m.group(1)) + 0.5}
     ),
     (
         r"(?:got\s+)?(\d+(?:\.\d+)?)\s*(?:hours?\s+)?(?:of\s+)?sleep",
@@ -169,7 +205,15 @@ PATTERNS = [
         lambda m: {"hours": float(m.group(1))}
     ),
     
-    # Wake time
+    # Wake time - supports "7 am", "7:30 am", "seven thirty am"
+    (
+        r"(?:i\s+)?woke\s+(?:up\s+)?(?:at\s+)?(\d{1,2})\s+(\d{2})\s*(am|pm)?",
+        "log_wake",
+        lambda m: {
+            "hour": int(m.group(1)) + (12 if m.group(3) and m.group(3).lower() == "pm" and int(m.group(1)) != 12 else 0),
+            "minute": int(m.group(2))
+        }
+    ),
     (
         r"(?:i\s+)?woke\s+(?:up\s+)?(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?",
         "log_wake",
@@ -179,9 +223,9 @@ PATTERNS = [
         }
     ),
     
-    # Vegetables
+    # Vegetables - "add", "had", "that" (common Vosk mishearing of "add")
     (
-        r"(?:add(?:ed)?|log(?:ged)?|ate|had)\s+(\d+)\s*(?:servings?\s+)?(?:of\s+)?vegetables?",
+        r"(?:add(?:ed)?|log(?:ged)?|ate|had|that)\s+(\d+)\s*(?:servings?\s+)?(?:of\s+)?vegetables?",
         "log_vegetables",
         lambda m: {"servings": int(m.group(1))}
     ),
