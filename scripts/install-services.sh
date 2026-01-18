@@ -1,6 +1,7 @@
 #!/bin/bash
 # Install systemd services for Health Dashboard
-# Run as: sudo ./scripts/install-services.sh
+# - health-dashboard: system service (runs web server)
+# - voice-assistant: user service (needs PulseAudio access)
 
 set -e
 
@@ -11,57 +12,72 @@ echo "=== Health Dashboard Service Installation ==="
 echo "Project directory: $PROJECT_DIR"
 echo ""
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root (sudo)"
-    exit 1
-fi
-
 # Detect the user who owns the project
 PROJECT_USER=$(stat -c '%U' "$PROJECT_DIR")
 PROJECT_GROUP=$(stat -c '%G' "$PROJECT_DIR")
+PROJECT_HOME=$(eval echo ~$PROJECT_USER)
 echo "Detected user: $PROJECT_USER"
-echo "Detected group: $PROJECT_GROUP"
+echo "Detected home: $PROJECT_HOME"
 echo ""
 
-# Update service files with correct paths and user
-echo "Installing health-dashboard.service..."
-sed -e "s|User=pi2|User=$PROJECT_USER|g" \
-    -e "s|Group=pi2|Group=$PROJECT_GROUP|g" \
-    -e "s|/home/pi2/health-dashboard|$PROJECT_DIR|g" \
-    "$SCRIPT_DIR/health-dashboard.service" > /etc/systemd/system/health-dashboard.service
+# --- Install health-dashboard as SYSTEM service (needs sudo) ---
+echo "=== Installing health-dashboard (system service) ==="
 
-echo "Installing voice-assistant.service..."
-sed -e "s|User=pi2|User=$PROJECT_USER|g" \
-    -e "s|Group=pi2|Group=$PROJECT_GROUP|g" \
-    -e "s|/home/pi2/health-dashboard|$PROJECT_DIR|g" \
-    "$SCRIPT_DIR/voice-assistant.service" > /etc/systemd/system/voice-assistant.service
+if [ "$EUID" -ne 0 ]; then
+    echo "Installing system service requires sudo..."
+    sudo sed -e "s|User=pi2|User=$PROJECT_USER|g" \
+        -e "s|Group=pi2|Group=$PROJECT_GROUP|g" \
+        -e "s|/home/pi2/health-dashboard|$PROJECT_DIR|g" \
+        "$SCRIPT_DIR/health-dashboard.service" > /tmp/health-dashboard.service
+    sudo mv /tmp/health-dashboard.service /etc/systemd/system/health-dashboard.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable health-dashboard.service
+else
+    sed -e "s|User=pi2|User=$PROJECT_USER|g" \
+        -e "s|Group=pi2|Group=$PROJECT_GROUP|g" \
+        -e "s|/home/pi2/health-dashboard|$PROJECT_DIR|g" \
+        "$SCRIPT_DIR/health-dashboard.service" > /etc/systemd/system/health-dashboard.service
+    systemctl daemon-reload
+    systemctl enable health-dashboard.service
+fi
 
-# Reload systemd
+echo "  Installed: /etc/systemd/system/health-dashboard.service"
+
+# --- Install voice-assistant as USER service (no sudo needed) ---
 echo ""
-echo "Reloading systemd..."
-systemctl daemon-reload
+echo "=== Installing voice-assistant (user service) ==="
 
-# Enable services
-echo "Enabling services..."
-systemctl enable health-dashboard.service
-systemctl enable voice-assistant.service
+USER_SERVICE_DIR="$PROJECT_HOME/.config/systemd/user"
+mkdir -p "$USER_SERVICE_DIR"
+
+# Create service file with correct paths (symlink won't work with sed substitution)
+sed -e "s|/home/pi2/health-dashboard|$PROJECT_DIR|g" \
+    "$SCRIPT_DIR/voice-assistant.service" > "$USER_SERVICE_DIR/voice-assistant.service"
+
+echo "  Installed: $USER_SERVICE_DIR/voice-assistant.service"
+
+# Reload user daemon (must run as the target user)
+if [ "$USER" = "$PROJECT_USER" ]; then
+    systemctl --user daemon-reload
+    systemctl --user enable voice-assistant.service
+    echo "  Enabled voice-assistant user service"
+else
+    echo "  NOTE: Run as $PROJECT_USER to enable: systemctl --user daemon-reload && systemctl --user enable voice-assistant"
+fi
 
 echo ""
 echo "=== Installation Complete ==="
 echo ""
-echo "Commands:"
-echo "  Start dashboard:    sudo systemctl start health-dashboard"
-echo "  Start voice:        sudo systemctl start voice-assistant"
-echo "  Start both:         sudo systemctl start health-dashboard voice-assistant"
+echo "System service (web dashboard):"
+echo "  sudo systemctl start health-dashboard"
+echo "  sudo systemctl status health-dashboard"
+echo "  journalctl -u health-dashboard -f"
 echo ""
-echo "  Stop dashboard:     sudo systemctl stop health-dashboard"
-echo "  Stop voice:         sudo systemctl stop voice-assistant"
+echo "User service (voice assistant) - run as $PROJECT_USER:"
+echo "  systemctl --user start voice-assistant"
+echo "  systemctl --user status voice-assistant"
+echo "  journalctl --user -u voice-assistant -f"
 echo ""
-echo "  View logs:          journalctl -u health-dashboard -f"
-echo "  View voice logs:    journalctl -u voice-assistant -f"
-echo ""
-echo "  Status:             sudo systemctl status health-dashboard voice-assistant"
-echo ""
-echo "To start services now:"
-echo "  sudo systemctl start health-dashboard voice-assistant"
+echo "To start both:"
+echo "  sudo systemctl start health-dashboard"
+echo "  systemctl --user start voice-assistant"

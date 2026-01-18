@@ -1,36 +1,53 @@
 #!/bin/bash
 # Uninstall systemd services for Health Dashboard
-# Run as: sudo ./scripts/uninstall-services.sh
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 echo "=== Health Dashboard Service Uninstallation ==="
 echo ""
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root (sudo)"
-    exit 1
+# Detect the user who owns the project
+PROJECT_USER=$(stat -c '%U' "$PROJECT_DIR")
+PROJECT_HOME=$(eval echo ~$PROJECT_USER)
+
+# --- Uninstall voice-assistant USER service ---
+echo "=== Removing voice-assistant (user service) ==="
+
+USER_SERVICE_FILE="$PROJECT_HOME/.config/systemd/user/voice-assistant.service"
+
+if [ "$USER" = "$PROJECT_USER" ]; then
+    systemctl --user stop voice-assistant.service 2>/dev/null || true
+    systemctl --user disable voice-assistant.service 2>/dev/null || true
 fi
 
-# Stop services
-echo "Stopping services..."
-systemctl stop health-dashboard.service 2>/dev/null || true
-systemctl stop voice-assistant.service 2>/dev/null || true
+rm -f "$USER_SERVICE_FILE"
+echo "  Removed: $USER_SERVICE_FILE"
 
-# Disable services
-echo "Disabling services..."
-systemctl disable health-dashboard.service 2>/dev/null || true
-systemctl disable voice-assistant.service 2>/dev/null || true
+if [ "$USER" = "$PROJECT_USER" ]; then
+    systemctl --user daemon-reload
+fi
 
-# Remove service files
-echo "Removing service files..."
-rm -f /etc/systemd/system/health-dashboard.service
-rm -f /etc/systemd/system/voice-assistant.service
+# --- Uninstall health-dashboard SYSTEM service ---
+echo ""
+echo "=== Removing health-dashboard (system service) ==="
 
-# Reload systemd
-echo "Reloading systemd..."
-systemctl daemon-reload
+if [ "$EUID" -ne 0 ]; then
+    echo "Removing system service requires sudo..."
+    sudo systemctl stop health-dashboard.service 2>/dev/null || true
+    sudo systemctl disable health-dashboard.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/health-dashboard.service
+    sudo systemctl daemon-reload
+else
+    systemctl stop health-dashboard.service 2>/dev/null || true
+    systemctl disable health-dashboard.service 2>/dev/null || true
+    rm -f /etc/systemd/system/health-dashboard.service
+    systemctl daemon-reload
+fi
+
+echo "  Removed: /etc/systemd/system/health-dashboard.service"
 
 echo ""
 echo "=== Uninstallation Complete ==="

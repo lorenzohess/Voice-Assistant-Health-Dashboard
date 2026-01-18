@@ -1,12 +1,9 @@
 [Unit]
 Description=Health Dashboard Voice Assistant
-After=network.target sound.target health-dashboard.service
-Wants=health-dashboard.service
+After=default.target
 
 [Service]
 Type=simple
-User=pi2
-Group=pi2
 WorkingDirectory=/home/pi2/health-dashboard
 ExecStart=/home/pi2/health-dashboard/venv/bin/python -m voice.main
 Restart=always
@@ -16,17 +13,7 @@ RestartSec=5
 Environment="PYTHONUNBUFFERED=1"
 Environment="HEALTH_API_URL=http://localhost:5000"
 Environment="STT_ENGINE=moonshine"
-Environment="HF_HUB_OFFLINE=1"
-Environment="STARTUP_DELAY=5"
-Environment="AUDIO_DEVICE=1"
-
-# Audio access
-SupplementaryGroups=audio
-
-# Logging
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=voice-assistant
+Environment="AUDIO_DEVICE=3"
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

@@ -16,60 +16,54 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Install Systemd Services
+### 2. Install Services
 
 ```bash
-sudo ./scripts/install-services.sh
+./scripts/install-services.sh
 ```
 
-This installs two services:
-- `health-dashboard` - Flask web server on port 5000
-- `voice-assistant` - Voice control with wake word "Hey Jarvis"
+This installs:
+- `health-dashboard` - **System service** (Flask web server on port 5000)
+- `voice-assistant` - **User service** (needs PulseAudio for microphone access)
 
 ### 3. Start Services
 
 ```bash
-sudo systemctl start health-dashboard voice-assistant
+# Web dashboard (system service)
+sudo systemctl start health-dashboard
+
+# Voice assistant (user service - no sudo)
+systemctl --user start voice-assistant
 ```
 
-Dashboard will be available at `http://<pi-ip>:5000`
+Dashboard: `http://<pi-ip>:5000`
 
 ---
 
 ## Service Management
 
-### Start/Stop
+### Web Dashboard (System Service)
 
 ```bash
-# Start
 sudo systemctl start health-dashboard
-sudo systemctl start voice-assistant
-
-# Stop
 sudo systemctl stop health-dashboard
-sudo systemctl stop voice-assistant
+sudo systemctl restart health-dashboard
+sudo systemctl status health-dashboard
 
-# Restart
-sudo systemctl restart health-dashboard voice-assistant
-```
-
-### View Logs
-
-```bash
-# Dashboard logs
+# View logs
 journalctl -u health-dashboard -f
-
-# Voice assistant logs
-journalctl -u voice-assistant -f
-
-# Both (last 100 lines)
-journalctl -u health-dashboard -u voice-assistant -n 100
 ```
 
-### Check Status
+### Voice Assistant (User Service)
 
 ```bash
-sudo systemctl status health-dashboard voice-assistant
+systemctl --user start voice-assistant
+systemctl --user stop voice-assistant
+systemctl --user restart voice-assistant
+systemctl --user status voice-assistant
+
+# View logs
+journalctl --user -u voice-assistant -f
 ```
 
 ---
@@ -82,74 +76,60 @@ After `git pull`:
 ./scripts/update.sh
 ```
 
-This will:
-1. Update Python dependencies
-2. Run database migrations
-3. Restart services (if using systemd)
-
 ---
 
 ## Voice Assistant Configuration
 
-Edit environment variables in `/etc/systemd/system/voice-assistant.service`:
+Edit `~/.config/systemd/user/voice-assistant.service`:
 
 ```ini
 # Speech-to-text engine: vosk, whisper, or moonshine
-Environment=STT_ENGINE=moonshine
+Environment="STT_ENGINE=moonshine"
 
-# API URL for the Flask dashboard
-Environment=HEALTH_API_URL=http://localhost:5000
-
-# Disable Hugging Face online checks (after first run)
-Environment=HF_HUB_OFFLINE=1
+# Audio device (run: python -m voice.main --list-devices)
+Environment="AUDIO_DEVICE=3"
 ```
 
 After editing:
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl restart voice-assistant
+systemctl --user daemon-reload
+systemctl --user restart voice-assistant
+```
+
+---
+
+## Auto-Start on Boot
+
+The web dashboard starts automatically on boot.
+
+For voice assistant to start on boot (without login):
+```bash
+sudo loginctl enable-linger $USER
 ```
 
 ---
 
 ## Troubleshooting
 
-### Dashboard won't start
+### Voice assistant audio issues
 
 ```bash
-# Check logs
-journalctl -u health-dashboard -n 50
+# List audio devices
+cd ~/health-dashboard && source venv/bin/activate
+python -m voice.main --list-devices
 
 # Test manually
-cd ~/health-dashboard
-source venv/bin/activate
-python run.py
-```
-
-### Voice assistant won't start
-
-```bash
-# Check audio devices
-arecord -l
-aplay -l
-
-# Check user is in audio group
-groups
-
-# Test manually
-cd ~/health-dashboard
-source venv/bin/activate
 python -m voice.main --debug
 ```
 
-### No wake word detection
+### Check service status
 
 ```bash
-# Test microphone
-python -m voice.listener --test-mic
+# Web dashboard
+sudo systemctl status health-dashboard
 
-# Test wake word
-python -m voice.listener --test-wake
+# Voice assistant  
+systemctl --user status voice-assistant
 ```
 
 ---
@@ -157,7 +137,7 @@ python -m voice.listener --test-wake
 ## Uninstalling
 
 ```bash
-sudo ./scripts/uninstall-services.sh
+./scripts/uninstall-services.sh
 ```
 
 ---
@@ -166,10 +146,7 @@ sudo ./scripts/uninstall-services.sh
 
 | File | Description |
 |------|-------------|
-| `scripts/install-services.sh` | Install systemd services |
-| `scripts/uninstall-services.sh` | Remove systemd services |
-| `scripts/update.sh` | Update code and restart services |
-| `scripts/health-dashboard.service` | Systemd service template (web) |
-| `scripts/voice-assistant.service` | Systemd service template (voice) |
-| `data/health.db` | SQLite database (health data) |
-| `data/foods.db` | SQLite database (food database) |
+| `/etc/systemd/system/health-dashboard.service` | Web server (system) |
+| `~/.config/systemd/user/voice-assistant.service` | Voice assistant (user) |
+| `data/health.db` | Health data database |
+| `data/foods.db` | Food database |
