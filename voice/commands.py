@@ -245,7 +245,8 @@ def cmd_log_vegetables(params: dict) -> CommandResult:
         if response.status_code != 200:
             return CommandResult(False, "Failed to get custom metrics.")
         
-        metrics = response.json()
+        data = response.json()
+        metrics = data.get("metrics", [])
         veg_metric = None
         for m in metrics:
             if "vegetable" in m["name"].lower():
