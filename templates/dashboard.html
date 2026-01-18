@@ -4,12 +4,26 @@
 <div class="dashboard-header">
     <h1>Health Overview</h1>
     
-    <div class="time-window-selector">
-        <a href="?window=1w" class="time-btn {% if window == '1w' %}active{% endif %}">1W</a>
-        <a href="?window=1m" class="time-btn {% if window == '1m' %}active{% endif %}">1M</a>
-        <a href="?window=3m" class="time-btn {% if window == '3m' %}active{% endif %}">3M</a>
-        <a href="?window=6m" class="time-btn {% if window == '6m' %}active{% endif %}">6M</a>
-        <a href="?window=1y" class="time-btn {% if window == '1y' %}active{% endif %}">1Y</a>
+    <div class="header-controls">
+        <div class="control-buttons">
+            <button class="btn btn-icon" id="volumeToggle" onclick="toggleVolume()" title="Toggle Volume">
+                <span id="volumeIcon">🔊</span>
+            </button>
+            <button class="btn btn-icon" onclick="clearDisplayData()" title="Clear Display">
+                🗑️
+            </button>
+            <button class="btn btn-icon" onclick="loadSampleData()" title="Load Sample Data">
+                📊
+            </button>
+        </div>
+        
+        <div class="time-window-selector">
+            <a href="?window=1w" class="time-btn {% if window == '1w' %}active{% endif %}">1W</a>
+            <a href="?window=1m" class="time-btn {% if window == '1m' %}active{% endif %}">1M</a>
+            <a href="?window=3m" class="time-btn {% if window == '3m' %}active{% endif %}">3M</a>
+            <a href="?window=6m" class="time-btn {% if window == '6m' %}active{% endif %}">6M</a>
+            <a href="?window=1y" class="time-btn {% if window == '1y' %}active{% endif %}">1Y</a>
+        </div>
     </div>
 </div>
 
@@ -1030,6 +1044,83 @@
                 window.location.reload();
             } else {
                 alert('Error: ' + (result.message || 'Failed to delete metric'));
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
+    
+    // --- Volume Control ---
+    let isMuted = false;
+    
+    async function toggleVolume() {
+        try {
+            const response = await fetch('/api/volume/toggle', { method: 'POST' });
+            const result = await response.json();
+            isMuted = result.muted;
+            document.getElementById('volumeIcon').textContent = isMuted ? '🔇' : '🔊';
+        } catch (error) {
+            console.error('Volume toggle failed:', error);
+        }
+    }
+    
+    async function checkVolumeState() {
+        try {
+            const response = await fetch('/api/volume/state');
+            const result = await response.json();
+            isMuted = result.muted;
+            document.getElementById('volumeIcon').textContent = isMuted ? '🔇' : '🔊';
+        } catch (error) {
+            console.error('Volume state check failed:', error);
+        }
+    }
+    
+    // Check initial volume state
+    checkVolumeState();
+    
+    // --- Clear Display Data ---
+    function clearDisplayData() {
+        if (!confirm('Clear all charts? (Data is NOT deleted from database)')) {
+            return;
+        }
+        
+        // Clear all Plotly charts
+        const charts = ['weightChart', 'sleepChart', 'wakeChart', 'workoutChart', 'caloriesChart'];
+        charts.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                Plotly.purge(el);
+                el.innerHTML = '<div class="empty-chart">No data displayed</div>';
+            }
+        });
+        
+        // Clear custom metric charts
+        document.querySelectorAll('[id^="customChart"]').forEach(el => {
+            Plotly.purge(el);
+            el.innerHTML = '<div class="empty-chart">No data displayed</div>';
+        });
+        
+        // Clear metrics boxes
+        document.querySelectorAll('.metric-value').forEach(el => {
+            el.textContent = '—';
+        });
+    }
+    
+    // --- Load Sample Data ---
+    async function loadSampleData() {
+        if (!confirm('Load sample data? This will add demo entries to your database.')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/sample-data', { method: 'POST' });
+            const result = await response.json();
+            
+            if (result.status === 'ok') {
+                alert('Sample data loaded! Refreshing...');
+                window.location.reload();
+            } else {
+                alert('Error: ' + (result.message || 'Failed to load sample data'));
             }
         } catch (error) {
             alert('Error: ' + error.message);

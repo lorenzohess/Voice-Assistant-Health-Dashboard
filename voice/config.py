@@ -31,6 +31,7 @@ PIPER_MODEL_PATH = str(MODELS_DIR / "piper" / "en_US-bryce-medium.onnx")
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen:0.5b"
 OLLAMA_TIMEOUT = 30  # seconds
+OLLAMA_ENABLED = False  # Disabled - small models are unreliable for intent parsing
 
 # Flask API settings
 API_BASE_URL = os.environ.get("HEALTH_API_URL", "http://localhost:5000")

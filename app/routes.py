@@ -582,6 +582,88 @@ def log_preset(preset_id):
     return jsonify({"status": "ok", "id": entry.id})
 
 
+# --- System Control API ---
+
+@main_bp.route("/api/volume/toggle", methods=["POST"])
+def toggle_volume():
+    """Toggle system volume mute state."""
+    import subprocess
+    try:
+        # Toggle mute using amixer
+        subprocess.run(["amixer", "set", "Master", "toggle"], check=True, capture_output=True)
+        
+        # Check new state
+        result = subprocess.run(["amixer", "get", "Master"], capture_output=True, text=True)
+        muted = "[off]" in result.stdout
+        
+        return jsonify({"status": "ok", "muted": muted})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "muted": False})
+
+
+@main_bp.route("/api/volume/state", methods=["GET"])
+def get_volume_state():
+    """Get current volume mute state."""
+    import subprocess
+    try:
+        result = subprocess.run(["amixer", "get", "Master"], capture_output=True, text=True)
+        muted = "[off]" in result.stdout
+        return jsonify({"muted": muted})
+    except:
+        return jsonify({"muted": False})
+
+
+@main_bp.route("/api/sample-data", methods=["POST"])
+def load_sample_data():
+    """Load sample data into the database."""
+    from datetime import timedelta
+    import random
+    
+    try:
+        today = date.today()
+        
+        # Add sample weight entries (last 30 days)
+        for i in range(30):
+            entry_date = today - timedelta(days=i)
+            weight = 75 + random.uniform(-2, 2)
+            
+            existing = WeightEntry.query.filter_by(date=entry_date).first()
+            if not existing:
+                entry = WeightEntry(date=entry_date, weight_kg=round(weight, 1))
+                db.session.add(entry)
+        
+        # Add sample sleep entries
+        for i in range(30):
+            entry_date = today - timedelta(days=i)
+            hours = 7 + random.uniform(-1.5, 1.5)
+            
+            existing = SleepEntry.query.filter_by(date=entry_date).first()
+            if not existing:
+                entry = SleepEntry(date=entry_date, hours=round(hours, 1))
+                db.session.add(entry)
+        
+        # Add sample calorie entries
+        for i in range(30):
+            entry_date = today - timedelta(days=i)
+            calories = 2000 + random.randint(-300, 300)
+            
+            existing = CalorieEntry.query.filter_by(date=entry_date).first()
+            if not existing:
+                entry = CalorieEntry(
+                    date=entry_date,
+                    meal_name="Sample meals",
+                    calories=calories
+                )
+                db.session.add(entry)
+        
+        db.session.commit()
+        return jsonify({"status": "ok", "message": "Sample data loaded"})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)})
+
+
 # --- Dashboard Refresh API ---
 
 @main_bp.route("/api/last-updated", methods=["GET"])

@@ -7,7 +7,7 @@ from typing import Optional, Any
 
 import requests
 
-from .config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, DEBUG
+from .config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_ENABLED, DEBUG
 
 
 @dataclass
@@ -448,7 +448,7 @@ JSON:"""
 def parse_intent(text: str) -> Optional[ParsedIntent]:
     """
     Parse user speech into structured intent.
-    Tries regex first, falls back to Ollama.
+    Tries regex first, optionally falls back to Ollama.
     """
     if not text or not text.strip():
         return None
@@ -458,10 +458,11 @@ def parse_intent(text: str) -> Optional[ParsedIntent]:
     if result:
         return result
     
-    # Fallback to Ollama (slow but flexible)
-    result = parse_with_ollama(text)
-    if result:
-        return result
+    # Fallback to Ollama (slow, unreliable with small models)
+    if OLLAMA_ENABLED:
+        result = parse_with_ollama(text)
+        if result:
+            return result
     
     # Could not parse
     if DEBUG:
