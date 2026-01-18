@@ -57,8 +57,10 @@ class VoiceListener:
         elif self.stt_engine == "moonshine":
             if DEBUG:
                 print(f"[Listener] Loading Moonshine model ({MOONSHINE_MODEL})...")
-            from moonshine_onnx import MoonshineOnnxModel
-            self.moonshine_model = MoonshineOnnxModel(model_name=MOONSHINE_MODEL)
+            # moonshine_onnx provides a transcribe() function that handles decoding
+            import moonshine_onnx
+            self.moonshine_transcribe = moonshine_onnx.transcribe
+            self.moonshine_model_name = MOONSHINE_MODEL
         else:
             if DEBUG:
                 print("[Listener] Loading Vosk model...")
@@ -351,24 +353,20 @@ class VoiceListener:
                 duration = len(audio_float) / self.sample_rate
                 print(f"[Listener] Transcribing {duration:.1f}s of audio with Moonshine...")
             
-            # Transcribe with Moonshine (expects 2D: batch x samples)
-            audio_batch = audio_float[np.newaxis, :]
-            result = self.moonshine_model.generate(audio_batch)
+            # Transcribe with Moonshine - use the transcribe() function which handles decoding
+            # transcribe() expects audio as numpy array and returns list of strings
+            result = self.moonshine_transcribe(audio_float, self.moonshine_model_name)
             
             if DEBUG:
-                print(f"[Listener] Moonshine raw result: {result} (type: {type(result)})")
+                print(f"[Listener] Moonshine result: {result}")
             
-            # Handle nested list result: [[token1, token2, ...]] or [["text"]]
-            if isinstance(result, list):
-                if len(result) > 0 and isinstance(result[0], list):
-                    # Nested list - flatten first level
-                    text = " ".join(str(item) for sublist in result for item in sublist)
-                else:
-                    text = " ".join(str(item) for item in result)
+            # Result is a list of strings, get the first one
+            if isinstance(result, list) and len(result) > 0:
+                text = result[0]
             else:
                 text = str(result) if result else ""
             
-            text = text.strip()
+            text = text.strip() if text else ""
             
             if DEBUG:
                 print(f"[Listener] Transcribed: {text}")
