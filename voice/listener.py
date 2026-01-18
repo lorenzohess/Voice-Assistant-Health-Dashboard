@@ -237,8 +237,12 @@ if __name__ == "__main__":
         model = WakeWordModel(wakeword_models=['hey_jarvis'])
         print(f"Model keys: {list(model.models.keys())}")
         
-        print("Listening for 'Hey Jarvis' (10 seconds)...")
-        print("Predictions will show when confidence > 0.1")
+        print("Listening for 'Hey Jarvis' (15 seconds)...")
+        print("Shows audio level and prediction confidence")
+        print()
+        
+        frame_count = 0
+        max_prediction = 0
         
         with sd.InputStream(
             samplerate=SAMPLE_RATE,
@@ -247,17 +251,38 @@ if __name__ == "__main__":
             blocksize=CHUNK_SIZE,
         ) as stream:
             start = time.time()
-            while time.time() - start < 10:
+            while time.time() - start < 15:
                 audio_data, _ = stream.read(CHUNK_SIZE)
+                
+                # Check audio level
+                audio_level = np.abs(audio_data).mean()
+                
+                # Convert for model
                 audio_float = audio_data.flatten().astype(np.float32) / 32768.0
                 
                 pred = model.predict(audio_float)
+                conf = pred.get('hey_jarvis', 0)
+                max_prediction = max(max_prediction, conf)
                 
-                for name, conf in pred.items():
-                    if conf > 0.1:
-                        print(f"  {name}: {conf:.3f}" + (" *** DETECTED ***" if conf > 0.5 else ""))
+                frame_count += 1
+                
+                # Show status every 10 frames (~0.8 seconds)
+                if frame_count % 10 == 0:
+                    bars = int(audio_level / 200)
+                    pred_bars = int(conf * 50)
+                    print(f"\rAudio: {'█' * min(bars, 30):30s} ({audio_level:5.0f}) | "
+                          f"Wake: {'█' * pred_bars:25s} ({conf:.3f})", end="", flush=True)
+                
+                if conf > 0.5:
+                    print(f"\n\n*** DETECTED! Confidence: {conf:.3f} ***")
+                    break
         
-        print("Done.")
+        print(f"\n\nDone. Max prediction seen: {max_prediction:.3f}")
+        if max_prediction < 0.01:
+            print("\nTroubleshooting:")
+            print("  - Max prediction near 0 suggests audio may not be reaching the model")
+            print("  - Check that microphone is working: python -m voice.listener --test-mic")
+            print("  - Try speaking louder or closer to the mic")
             
     elif "--test-stt" in sys.argv:
         print("Testing speech-to-text. Speak now...")
