@@ -19,6 +19,7 @@ from .config import (
     WHISPER_MODEL_SIZE,
     WHISPER_DEVICE,
     WHISPER_COMPUTE_TYPE,
+    MOONSHINE_MODEL,
     VAD_SILENCE_THRESHOLD,
     MAX_RECORDING_TIME,
     DEBUG,
@@ -40,6 +41,10 @@ class VoiceListener:
         self.wake_model = WakeWordModel(wakeword_models=[WAKE_WORD_MODEL])
         
         # Load STT model based on config
+        self.vosk_model = None
+        self.whisper_model = None
+        self.moonshine_model = None
+        
         if self.stt_engine == "whisper":
             if DEBUG:
                 print(f"[Listener] Loading Whisper model ({WHISPER_MODEL_SIZE})...")
@@ -49,13 +54,16 @@ class VoiceListener:
                 device=WHISPER_DEVICE,
                 compute_type=WHISPER_COMPUTE_TYPE,
             )
-            self.vosk_model = None
+        elif self.stt_engine == "moonshine":
+            if DEBUG:
+                print(f"[Listener] Loading Moonshine model ({MOONSHINE_MODEL})...")
+            from moonshine_onnx import MoonshineOnnxModel
+            self.moonshine_model = MoonshineOnnxModel(model_name=MOONSHINE_MODEL)
         else:
             if DEBUG:
                 print("[Listener] Loading Vosk model...")
             from vosk import Model
             self.vosk_model = Model(VOSK_MODEL_PATH)
-            self.whisper_model = None
         
         if DEBUG:
             print(f"[Listener] Models loaded. STT engine: {self.stt_engine}")
@@ -136,6 +144,8 @@ class VoiceListener:
         """
         if self.stt_engine == "whisper":
             return self._transcribe_whisper()
+        elif self.stt_engine == "moonshine":
+            return self._transcribe_moonshine()
         else:
             return self._transcribe_vosk()
     
@@ -285,6 +295,85 @@ class VoiceListener:
                 traceback.print_exc()
             return ""
     
+    def _transcribe_moonshine(self) -> str:
+        """Transcribe using Moonshine (fast and accurate, optimized for edge devices)."""
+        if DEBUG:
+            print("[Listener] Listening for speech (Moonshine)...")
+        
+        audio_chunks = []
+        silence_start = None
+        recording_start = time.time()
+        has_speech = False
+        
+        try:
+            with sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=CHANNELS,
+                dtype='int16',
+                blocksize=self.chunk_size,
+                device=AUDIO_INPUT_DEVICE,
+            ) as stream:
+                while True:
+                    audio_data, _ = stream.read(self.chunk_size)
+                    audio_chunks.append(audio_data.flatten())
+                    
+                    # Check for silence (simple energy-based VAD)
+                    energy = np.abs(audio_data).mean()
+                    is_silent = energy < 500
+                    
+                    if not is_silent:
+                        has_speech = True
+                        silence_start = None
+                    elif has_speech:
+                        # Only start silence timer after we've heard speech
+                        if silence_start is None:
+                            silence_start = time.time()
+                        elif time.time() - silence_start > VAD_SILENCE_THRESHOLD:
+                            # Long silence after speech - stop recording
+                            break
+                    
+                    # Max recording time
+                    if time.time() - recording_start > MAX_RECORDING_TIME:
+                        if DEBUG:
+                            print("[Listener] Max recording time reached")
+                        break
+            
+            if not audio_chunks or not has_speech:
+                if DEBUG:
+                    print("[Listener] No speech detected")
+                return ""
+            
+            # Concatenate and convert to float32 for Moonshine
+            audio_array = np.concatenate(audio_chunks)
+            audio_float = audio_array.astype(np.float32) / 32768.0
+            
+            if DEBUG:
+                duration = len(audio_float) / self.sample_rate
+                print(f"[Listener] Transcribing {duration:.1f}s of audio with Moonshine...")
+            
+            # Transcribe with Moonshine
+            text = self.moonshine_model.generate(audio_float)
+            
+            # Handle if result is a list
+            if isinstance(text, list):
+                text = " ".join(text)
+            
+            text = text.strip() if text else ""
+            
+            if DEBUG:
+                print(f"[Listener] Transcribed: {text}")
+            
+            return text
+            
+        except KeyboardInterrupt:
+            return ""
+        except Exception as e:
+            if DEBUG:
+                print(f"[Listener] Error in Moonshine transcription: {e}")
+                import traceback
+                traceback.print_exc()
+            return ""
+    
     def listen_once(self, skip_wake_word: bool = False) -> str:
         """
         Wait for wake word (unless skipped), then transcribe speech.
@@ -416,9 +505,11 @@ if __name__ == "__main__":
         print("  python -m voice.listener --test-stt   # Test speech-to-text")
         print()
         print("Environment variables:")
-        print(f"  STT_ENGINE={STT_ENGINE} (vosk or whisper)")
+        print(f"  STT_ENGINE={STT_ENGINE} (vosk, whisper, or moonshine)")
         print(f"  WHISPER_MODEL={WHISPER_MODEL_SIZE} (tiny, base, small, medium)")
+        print(f"  MOONSHINE_MODEL={MOONSHINE_MODEL} (moonshine/tiny, moonshine/base)")
         print()
         print("Examples:")
         print("  STT_ENGINE=whisper python -m voice.listener --test-stt")
-        print("  STT_ENGINE=whisper WHISPER_MODEL=tiny python -m voice.main --debug")
+        print("  STT_ENGINE=moonshine python -m voice.listener --test-stt")
+        print("  STT_ENGINE=moonshine python -m voice.main --debug")

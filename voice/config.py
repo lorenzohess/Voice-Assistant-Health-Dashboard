@@ -22,7 +22,8 @@ WAKE_WORD_THRESHOLD = 0.7  # Confidence threshold (0-1), higher = fewer false po
 WAKE_WORD_REFRACTORY = 2.0  # Seconds to wait after detection before listening again
 
 # Speech-to-Text settings
-# STT_ENGINE: "vosk" (fast, less accurate) or "whisper" (slower, more accurate)
+# STT_ENGINE: "vosk" (fast, less accurate), "whisper" (slower, more accurate), 
+#             or "moonshine" (fast AND accurate, best for Pi)
 STT_ENGINE = os.environ.get("STT_ENGINE", "vosk")
 
 # Vosk settings
@@ -34,6 +35,11 @@ VOSK_MODEL_PATH = str(MODELS_DIR / "vosk-model")
 WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
 WHISPER_DEVICE = "cpu"  # Use "cuda" if you have NVIDIA GPU
 WHISPER_COMPUTE_TYPE = "int8"  # Use "int8" for CPU, "float16" for GPU
+
+# Moonshine settings (usefulsensors/moonshine)
+# Model sizes: tiny (~36MB), base (~61MB)
+# Designed for edge devices, 5x faster than Whisper with similar accuracy
+MOONSHINE_MODEL = os.environ.get("MOONSHINE_MODEL", "moonshine/base")
 
 # Piper TTS settings
 PIPER_MODEL_PATH = str(MODELS_DIR / "piper" / "en_US-bryce-medium.onnx")

@@ -30,6 +30,7 @@ requests>=2.31.0
 # Speech-to-Text options
 vosk==0.3.45  # Fast, less accurate
 faster-whisper>=1.0.0  # Slower, more accurate (optional)
+# Moonshine: pip install useful-moonshine-onnx@git+https://github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
 
 # Audio processing
 pyaudio==0.2.14
