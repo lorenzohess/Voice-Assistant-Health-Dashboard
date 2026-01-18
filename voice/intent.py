@@ -207,10 +207,9 @@ PATTERNS = [
         lambda m: {"food": m.group(1).strip(), "calories": int(m.group(2))}
     ),
     
-    # Vegetables - MUST come before add_food pattern!
-    # Matches: "add 6 servings of vegetables", "had 3 vegetables"
+    # Vegetables - "vegetables, 3 servings" or "vegetables 3 servings"
     (
-        r"(?:add(?:ed)?|log(?:ged)?|ate|had|that)\s+(\d+)\s*(?:servings?\s+)?(?:of\s+)?vegetables?",
+        r"vegetables?\s*,?\s*(\d+)\s*(?:servings?)?",
         "log_vegetables",
         lambda m: {"servings": int(m.group(1))}
     ),
