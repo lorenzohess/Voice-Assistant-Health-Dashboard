@@ -14,7 +14,7 @@ CHUNK_SIZE = 1280  # 80ms at 16kHz - good for wake word detection
 
 # Microphone - set to None for default, or specify device index
 # Use `python -c "import sounddevice; print(sounddevice.query_devices())"` to list
-AUDIO_INPUT_DEVICE = os.environ.get("AUDIO_DEVICE", 3)  # None = default capture device
+AUDIO_INPUT_DEVICE = os.environ.get("AUDIO_DEVICE", 1)  # 1 = my microphone
 if AUDIO_INPUT_DEVICE is not None:
     AUDIO_INPUT_DEVICE = int(AUDIO_INPUT_DEVICE)
 
