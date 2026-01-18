@@ -53,6 +53,9 @@ class VoiceListener:
         """
         if DEBUG:
             print(f"[Listener] Listening for wake word '{WAKE_WORD_MODEL}'...")
+            print(f"[Listener] Available models: {list(self.wake_model.models.keys())}")
+        
+        frame_count = 0
         
         try:
             with sd.InputStream(
@@ -65,16 +68,25 @@ class VoiceListener:
                 while True:
                     audio_data, _ = stream.read(self.chunk_size)
                     
-                    # Convert to float32 for wake word model
+                    # Convert to float32 for wake word model (range -1 to 1)
                     audio_float = audio_data.flatten().astype(np.float32) / 32768.0
                     
                     # Check for wake word
                     prediction = self.wake_model.predict(audio_float)
                     
-                    for wake_word, confidence in prediction.items():
+                    frame_count += 1
+                    
+                    # Debug: show predictions periodically
+                    if DEBUG and frame_count % 50 == 0:  # Every ~4 seconds
+                        max_conf = max(prediction.values()) if prediction else 0
+                        if max_conf > 0.1:  # Only show if there's some activity
+                            print(f"[Listener] Predictions: {prediction}")
+                    
+                    # Check all model predictions
+                    for model_name, confidence in prediction.items():
                         if confidence > WAKE_WORD_THRESHOLD:
                             if DEBUG:
-                                print(f"[Listener] Wake word detected: {wake_word} ({confidence:.2f})")
+                                print(f"[Listener] Wake word detected: {model_name} ({confidence:.2f})")
                             return True
                             
         except KeyboardInterrupt:
@@ -82,6 +94,8 @@ class VoiceListener:
         except Exception as e:
             if DEBUG:
                 print(f"[Listener] Error in wake word detection: {e}")
+                import traceback
+                traceback.print_exc()
             return False
     
     def listen_and_transcribe(self) -> str:
@@ -199,12 +213,51 @@ if __name__ == "__main__":
         print("\nDone.")
         
     elif "--test-wake" in sys.argv:
-        print(f"Testing wake word detection. Say '{WAKE_WORD_MODEL}'...")
+        print(f"Testing wake word detection. Say 'Hey Jarvis'...")
+        
+        # Force debug mode for this test
+        import voice.config as cfg
+        cfg.DEBUG = True
+        
         listener = VoiceListener()
+        print(f"Loaded models: {list(listener.wake_model.models.keys())}")
+        print(f"Threshold: {WAKE_WORD_THRESHOLD}")
+        print("Listening... (Ctrl+C to stop)")
+        
         if listener.wait_for_wake_word():
-            print("Wake word detected!")
+            print("\n*** Wake word detected! ***")
         else:
-            print("No wake word detected or error.")
+            print("\nNo wake word detected or error.")
+    
+    elif "--test-wake-raw" in sys.argv:
+        # Raw test without our wrapper
+        print("Raw OpenWakeWord test...")
+        from openwakeword.model import Model as WakeWordModel
+        
+        model = WakeWordModel(wakeword_models=['hey_jarvis'])
+        print(f"Model keys: {list(model.models.keys())}")
+        
+        print("Listening for 'Hey Jarvis' (10 seconds)...")
+        print("Predictions will show when confidence > 0.1")
+        
+        with sd.InputStream(
+            samplerate=SAMPLE_RATE,
+            channels=CHANNELS,
+            dtype='int16',
+            blocksize=CHUNK_SIZE,
+        ) as stream:
+            start = time.time()
+            while time.time() - start < 10:
+                audio_data, _ = stream.read(CHUNK_SIZE)
+                audio_float = audio_data.flatten().astype(np.float32) / 32768.0
+                
+                pred = model.predict(audio_float)
+                
+                for name, conf in pred.items():
+                    if conf > 0.1:
+                        print(f"  {name}: {conf:.3f}" + (" *** DETECTED ***" if conf > 0.5 else ""))
+        
+        print("Done.")
             
     elif "--test-stt" in sys.argv:
         print("Testing speech-to-text. Speak now...")
