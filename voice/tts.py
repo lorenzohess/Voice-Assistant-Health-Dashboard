@@ -124,8 +124,22 @@ class TextToSpeech:
         # Synthesize on the fly
         try:
             # Use subprocess with pipes to avoid shell escaping issues
+            # Try to find piper - might be in venv or system path
+            import shutil
+            piper_cmd = shutil.which("piper")
+            if not piper_cmd:
+                # Check common locations
+                for path in ["/usr/bin/piper", "/usr/local/bin/piper", 
+                             str(Path(self.model_path).parent.parent.parent / "venv" / "bin" / "piper")]:
+                    if Path(path).exists():
+                        piper_cmd = path
+                        break
+            if not piper_cmd:
+                print(f"[TTS] ERROR: piper command not found in PATH")
+                return
+                
             piper_proc = subprocess.Popen(
-                ["piper", "--model", str(self.model_path), "--output-raw"],
+                [piper_cmd, "--model", str(self.model_path), "--output-raw"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -146,10 +160,12 @@ class TextToSpeech:
             aplay_proc.wait(timeout=30)
             piper_proc.wait(timeout=5)
 
-            if piper_proc.returncode != 0 and DEBUG:
-                print(f"[TTS] Piper warning: {piper_proc.stderr.read().decode()}")
-            if aplay_proc.returncode != 0 and DEBUG:
-                print(f"[TTS] Aplay warning: {aplay_proc.stderr.read().decode()}")
+            if piper_proc.returncode != 0:
+                stderr = piper_proc.stderr.read().decode()
+                print(f"[TTS] Piper failed (code {piper_proc.returncode}): {stderr}")
+            if aplay_proc.returncode != 0:
+                stderr = aplay_proc.stderr.read().decode()
+                print(f"[TTS] Aplay failed (code {aplay_proc.returncode}): {stderr}")
 
         except subprocess.TimeoutExpired:
             process.kill()
