@@ -1,0 +1,413 @@
+#+TITLE: Health Dashboard
+#+AUTHOR: 
+#+OPTIONS: toc:3 num:t
+
+* Description
+Health Dashboard is a self-hosted, private health tracking system designed for Raspberry Pi. It combines a web-based dashboard with voice control for hands-free data entry.
+
+⚠ *Disclaimer:* ⚠
+Please be aware that this project was coded entirely with Opus 4.5 Thinking and that I have not looked over the code. As such, this project may not be optimized, may contain security issues, may claim to support non-existent features, and may suffer from the many other limitations of vibe-coding.
+
+This project was implemented to meet my needs because I am the primary user. Thus other users may have trouble using it. For example, my implementation may not be deployable on arbitrary hardware. Also, the design choices reflect my needs and may lack the abstraction needed for a system that's generalizable to different users. Also, I have not verified the installation process and dependencies mentioned in this README.
+
+If you wish to use this project, I strongly encourage you review the code (or get an LLM to help) to ensure it meets your needs (optimization, security, features, etc). My intention in publishing this project was more to document that I spent time on it rather than to provide a deployable solution for others. I'm happy to help you modify it and accept pull requests, but I just don't have the time to single-handedly polish, verify, and validate the entire project, much less continue development.
+
+This README is quite lengthy because it serves as the project documentation.
+** Features
+- *Web Dashboard*: real-time graphs for weight, sleep, wake time, workouts, calories, and custom metrics
+- *Voice Assistant*: hands-free data entry using wake word detection ("Hey Jarvis")
+- *Morning Alarm*: scheduled music playback with randomized playlists
+- *Display Control*: automatic wake/sleep scheduling for the monitor
+- *Custom Metrics*: add your own trackable data with voice keywords
+- *Offline-First*: no cloud dependencies - all data stays local
+- *Privacy-Focused*: speech, text, and intent processing is on-device
+- (Not Implemented) Meal Calorie Computation: use local LLM (Ollama?) and USDA food database to compute calories in a meal.
+** Architecture
+#+BEGIN_SRC
+┌─────────────────────────────────────────────────────────────┐
+│                      Web Browser                            │
+│                   (Chromium Kiosk)                          │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ HTTP
+┌─────────────────────▼───────────────────────────────────────┐
+│                   Flask Web Server                          │
+│              (health-dashboard.service)                     │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │   Routes    │  │   Models    │  │   Food Database     │  │
+│  │   (API)     │  │  (SQLite)   │  │   (foods.db)        │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                  Voice Assistant                            │
+│              (voice-assistant.service)                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │  Listener   │  │   Intent    │  │     Commands        │  │
+│  │ (STT/Wake)  │  │  (Parser)   │  │   (API Calls)       │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                   Alarm Service                             │
+│                  (alarm.service)                            │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │  Scheduler  │  │   Player    │  │  Display Control    │  │
+│  │(APScheduler)│  │   (mpv)     │  │     (wlopm)         │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+#+END_SRC
+* Dependencies
+** Hardware
+| Component         | Purpose           | Notes                |
+|-------------------+-------------------+----------------------|
+| Raspberry Pi 4/5  | Main computer     | 4GB+ RAM recommended |
+| USB Microphone    | Voice input       | Get a clear mic      |
+| Speaker/Audio out | TTS and alarm     | 3.5mm or HDMI audio  |
+| HDMI Display      | Dashboard display | -                    |
+** Software
+*** System Packages
+#+BEGIN_SRC bash
+# Audio and media
+sudo apt install mpv pulseaudio alsa-utils
+
+# Display control (Wayland)
+sudo apt install wlopm
+
+# Python build dependencies
+sudo apt install python3-pip python3-venv python3-dev
+sudo apt install portaudio19-dev  # For PyAudio
+#+END_SRC
+*** Python Packages
+See =requirements.txt= for the complete list. Key dependencies:
+
+| Package          | Version | Purpose                   |
+|------------------+---------+---------------------------|
+| Flask            | >=3.0.0 | Web framework             |
+| Flask-SQLAlchemy | >=3.1.1 | Database ORM              |
+| plotly           |  5.18.0 | Interactive charts        |
+| APScheduler      |  3.10.4 | Scheduled tasks           |
+| vosk             |  0.3.45 | Speech-to-text (fast)     |
+| faster-whisper   | >=1.0.0 | Speech-to-text (accurate) |
+| openwakeword     |   0.6.0 | Wake word detection       |
+| piper-tts        |   1.2.0 | Text-to-speech            |
+| sounddevice      |   0.4.6 | Audio I/O                 |
+| rapidfuzz        |   3.5.2 | Fuzzy string matching     |
+*** AI Models (Downloaded Separately)
+| Model                | Size  | Location            |
+|----------------------+-------+---------------------|
+| Vosk English         | ~50MB | =models/vosk-model/=  |
+| Piper TTS            | ~60MB | =models/piper/*.onnx= |
+| OpenWakeWord         | ~5MB  | Auto-downloaded     |
+| Moonshine (optional) | ~60MB | Auto-downloaded     |
+* Installation
+** Quick Start
+#+BEGIN_SRC bash
+# Clone the repository
+git clone https://github.com/lorenzohess/Voice-Assistant-Health-Dashboard 
+cd Voice-Assistant-Health-Dashboard
+
+# Run the setup script
+./scripts/setup.sh
+
+# Start services
+sudo systemctl start health-dashboard
+systemctl --user start voice-assistant
+systemctl --user start alarm
+#+END_SRC
+** Manual Installation
+*** 1. Create Virtual Environment
+#+BEGIN_SRC bash
+cd ~/Voice-Assistant-Health-Dashboard
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+#+END_SRC
+*** 2. Download AI Models
+#+BEGIN_SRC bash
+# Vosk model
+mkdir -p models
+cd models
+wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+unzip vosk-model-small-en-us-0.15.zip
+mv vosk-model-small-en-us-0.15 vosk-model
+cd ..
+
+# Piper TTS model (choose one)
+mkdir -p models/piper
+cd models/piper
+# Download from: https://huggingface.co/rhasspy/piper-voices
+# Example: en_US-bryce-medium.onnx + .onnx.json
+cd ../..
+
+# OpenWakeWord (auto-downloads on first run)
+python -c "from openwakeword.model import Model; Model(wakeword_models=['hey_jarvis'])"
+#+END_SRC
+*** 3. Initialize Database
+#+BEGIN_SRC bash
+source venv/bin/activate
+python -c "from app import create_app, db; app = create_app(); app.app_context().push(); db.create_all()"
+
+# Optional: Add sample data
+python scripts/add_sample_data.py
+#+END_SRC
+*** 4. Install Systemd Services
+#+BEGIN_SRC bash
+./scripts/install-services.sh
+#+END_SRC
+* Hardware Setup
+** USB Microphone
+1. Connect the USB microphone
+2. Verify detection:
+   #+BEGIN_SRC bash
+   arecord -l
+   # Should show your microphone as a capture device
+   #+END_SRC
+3. Find the device index:
+   #+BEGIN_SRC bash
+   python -c "import sounddevice; print(sounddevice.query_devices())"
+   #+END_SRC
+4. Set the device in =voice-assistant.service= or =voice/config.py:17=:
+   #+BEGIN_SRC ini
+   Environment="AUDIO_DEVICE=3"  # Replace with your device number
+   #+END_SRC
+5. Boost microphone gain if needed:
+   #+BEGIN_SRC bash
+   alsamixer  # Press F6 to select USB mic, increase capture level
+   # Or:
+   amixer -c 3 set Capture 100%
+   #+END_SRC
+** Audio Output
+#+BEGIN_SRC bash
+# Test speaker
+speaker-test -t wav -c 2
+
+# Set volume
+amixer set Master 65%
+
+# If using HDMI audio, ensure it's selected:
+raspi-config  # Advanced Options -> Audio -> HDMI
+#+END_SRC
+** Display (Wayland/wlopm)
+#+BEGIN_SRC bash
+# Test display control. Make sure you type out wlopm --on '*' so you can hit
+# enter to run it and turn your display back on after turning it off.
+wlopm --off '*'   # Turn off 
+wlopm --on '*'    # Turn on
+
+# Check current state
+wlopm
+#+END_SRC
+* Usage
+** Web Dashboard
+Access at =http://<pi-ip>:5000= or =http://localhost:5000=
+*** Dashboard Controls
+- *Time Range*: Click 1W / 1M / 3M / 6M / 1Y to change graph range
+- *Add Data*: Click "+ Add" on any card
+- *Export*: Click "Export CSV" in header
+- *Volume*: Slider in right panel
+- *Alarm*: Set time and enable/disable in right panel
+*** Adding Custom Metrics
+1. Click "+ Add New Graph" card
+2. Enter name, unit, chart type, color
+3. Optionally set a voice keyword for voice control
+** Voice Commands
+Say "Hey Jarvis" to activate, then:
+*** Health Tracking
+| Command       | Example                       |
+|---------------+-------------------------------|
+| Add calories  | "Add 500 calories"            |
+| Log weight    | "I weigh 165 pounds"          |
+| Log sleep     | "I slept 8 hours"             |
+| Log wake time | "I woke up at 7 AM"           |
+| Log workout   | "I worked out for 30 minutes" |
+| Custom metric | "Vegetables 5 servings"       |
+*** System Control
+| Command       | Action           |
+|---------------+------------------|
+| "Shut down"   | Turn off display |
+| "Go to sleep" | Turn off display |
+| "Sleep mode"  | Turn off display |
+** Alarm & Display Wake
+*** Configuration Files
+| File                     | Purpose                   |
+|--------------------------+---------------------------|
+| =data/alarm_config.json=   | Music alarm time and days |
+| =data/display_config.json= | Display wake time         |
+*** Alarm Config Example
+#+BEGIN_SRC json
+{
+  "enabled": true,
+  "time": "08:00",
+  "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+}
+#+END_SRC
+*** Display Config Example
+#+BEGIN_SRC json
+{
+  "wake_time": "07:00",
+  "wake_enabled": true
+}
+#+END_SRC
+*** Music Files
+Place audio files in =music/= directory. Supported formats:
+- .m4a
+- .mp3
+- .opus
+- .wav
+- .flac
+- .ogg
+* Development
+** Project Structure
+#+BEGIN_SRC
+Voice-Assistant-Health-Dashboard/
+├── app/                    # Flask application
+│   ├── __init__.py         # App factory
+│   ├── models.py           # SQLAlchemy models
+│   ├── routes.py           # API endpoints
+│   ├── food_db.py          # Food database functions
+│   ├── pool_schedule.py    # Pool schedule widget
+│   └── validation.py       # Input validation
+├── voice/                  # Voice assistant
+│   ├── config.py           # Configuration
+│   ├── listener.py         # Audio input & STT
+│   ├── intent.py           # Command parsing
+│   ├── commands.py         # API command handlers
+│   ├── tts.py              # Text-to-speech
+│   └── main.py             # Entry point
+├── alarm/                  # Alarm service
+│   ├── scheduler.py        # APScheduler jobs
+│   ├── player.py           # Music playback (mpv)
+│   ├── display.py          # Display control (wlopm)
+│   └── main.py             # Entry point
+├── templates/              # Jinja2 HTML templates
+├── static/css/             # Stylesheets
+├── data/                   # SQLite databases & configs
+├── models/                 # AI model files
+├── music/                  # Alarm music files
+├── scripts/                # Deployment scripts
+├── requirements.txt        # Python dependencies
+└── run.py                  # Development server
+#+END_SRC
+** Running in Development
+#+BEGIN_SRC bash
+source venv/bin/activate
+
+# Flask with auto-reload
+FLASK_DEBUG=1 python run.py
+
+# Voice assistant with debug output
+python -m voice.main --debug
+
+# Alarm service
+python -m alarm.main
+#+END_SRC
+** Testing Voice Commands
+#+BEGIN_SRC bash
+# Test intent parsing
+python -c "
+from voice.intent import parse_intent
+print(parse_intent('I weigh 180 pounds'))
+"
+
+# Test command execution
+python -c "
+from voice.intent import parse_intent
+from voice.commands import execute_command
+intent = parse_intent('I slept 8 hours')
+print(execute_command(intent))
+"
+#+END_SRC
+** Database Migrations
+When modifying models, run:
+#+BEGIN_SRC bash
+python scripts/migrate_db.py
+#+END_SRC
+** STT Engine Selection
+Set in =voice/config.py= or environment:
+#+BEGIN_SRC bash
+# Vosk (fast, less accurate)
+STT_ENGINE=vosk python -m voice.main
+
+# Whisper (slower, more accurate)
+STT_ENGINE=whisper python -m voice.main
+
+# Moonshine (fast AND accurate, recommended)
+STT_ENGINE=moonshine python -m voice.main
+#+END_SRC
+* Deployment
+** Systemd Services
+| Service          | Type   | Description                |
+|------------------+--------+----------------------------|
+| health-dashboard | System | Flask web server           |
+| voice-assistant  | User   | Voice control              |
+| alarm            | User   | Music alarm & display wake |
+*** Managing Services
+#+BEGIN_SRC bash
+# Web dashboard (system service)
+sudo systemctl start health-dashboard
+sudo systemctl status health-dashboard
+sudo systemctl restart health-dashboard
+journalctl -u health-dashboard -f
+
+# Voice assistant (user service)
+systemctl --user start voice-assistant
+systemctl --user status voice-assistant
+journalctl --user -u voice-assistant -f
+
+# Alarm (user service)
+systemctl --user start alarm
+systemctl --user status alarm
+journalctl --user -u alarm -f
+#+END_SRC
+** Updating
+#+BEGIN_SRC bash
+cd Voice-Assistant-Health-Dashboard
+git pull
+./scripts/update.sh
+#+END_SRC
+** Kiosk Mode (Chromium)
+For a dedicated dashboard display:
+#+BEGIN_SRC bash
+# Add to ~/.config/labwc/autostart or similar:
+chromium-browser --kiosk --noerrdialogs --disable-infobars \
+  --disable-session-crashed-bubble http://localhost:5000
+#+END_SRC
+* Troubleshooting
+** Voice Assistant Not Hearing
+1. Check microphone is detected: =arecord -l=
+2. Verify device index: =python -m voice.main --list-devices=
+3. Boost capture volume: =alsamixer= (F6 to select device)
+4. Check audio levels in debug mode: =python -m voice.main --debug=
+** No Sound from TTS/Alarm
+1. Check speaker: =speaker-test -t wav=
+2. Verify volume: =amixer get Master=
+3. For user services, ensure PulseAudio access:
+   #+BEGIN_SRC ini
+   # In service file:
+   Environment="XDG_RUNTIME_DIR=/run/user/1000"
+   Environment="PULSE_SERVER=unix:/run/user/1000/pulse/native"
+   #+END_SRC
+** Audio Stuttering
+1. Use ALSA directly (bypass PulseAudio):
+   #+BEGIN_SRC python
+   # In alarm/player.py, mpv uses --ao=alsa
+   #+END_SRC
+2. Increase audio buffer in mpv
+** Display Control Not Working
+1. Test wlopm: =wlopm --off '*'=
+2. Check Wayland session: =echo $XDG_SESSION_TYPE=
+3. Ensure wlopm is installed: =sudo apt install wlopm=
+** Database Errors
+1. Run migrations: =python scripts/migrate_db.py=
+2. Check permissions: =ls -la data/=
+3. Recreate database (loses data):
+   #+BEGIN_SRC bash
+   rm data/health.db
+   python -c "from app import create_app, db; app = create_app(); app.app_context().push(); db.create_all()"
+   #+END_SRC
+* Acknowledgments
+- [[https://alphacephei.com/vosk/][Vosk]] - Offline speech recognition
+- [[https://github.com/rhasspy/piper][Piper]] - Fast neural TTS
+- [[https://github.com/dscripka/openWakeWord][OpenWakeWord]] - Wake word detection
+- [[https://github.com/usefulsensors/moonshine][Moonshine]] - Efficient speech recognition
+- [[https://plotly.com/][Plotly]] - Interactive charts
