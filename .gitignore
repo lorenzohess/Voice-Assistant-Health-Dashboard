@@ -29,3 +29,4 @@ models/
 # Data
 music/
 data/private-health.db
+voice/.tts_cache/*
