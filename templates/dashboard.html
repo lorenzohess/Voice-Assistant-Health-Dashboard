@@ -1252,6 +1252,9 @@
     // Get initial volume state
     getVolumeState();
     
+    // Poll volume state every second to sync with hardware potentiometer
+    setInterval(getVolumeState, 1000);
+    
     // --- Alarm Control ---
     let alarmPlaying = false;
     
