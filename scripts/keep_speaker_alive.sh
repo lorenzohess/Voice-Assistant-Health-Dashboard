@@ -7,5 +7,8 @@
 # paplay --volume=1000 <(sox -n -r 44100 -c 2 -t wav - synth 0.1 sine 440 vol 0.01) 2>/dev/null
 
 # Alternative if sox/paplay don't work - use speaker-test for 0.1 seconds
-# Send SIGKILL (9) after 3 seconds
+# Send SIGKILL (9) after 3 seconds. Too short (e.g. 0.2s) and it causes loud
+# audio artifacts.
+export XDG_RUNTIME_DIR="/run/user/$(id -u pi2)"
+export PULSE_RUNTIME_PATH="/run/user/$(id -u pi2)/pulse"
 timeout -s 9 3 speaker-test -t sine -f 20 -l 1 >/dev/null 2>&1

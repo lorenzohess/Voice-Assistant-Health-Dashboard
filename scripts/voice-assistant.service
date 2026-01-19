@@ -14,6 +14,9 @@ Environment="PYTHONUNBUFFERED=1"
 Environment="HEALTH_API_URL=http://localhost:5000"
 Environment="STT_ENGINE=moonshine"
 Environment="AUDIO_DEVICE=3"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+Environment="PULSE_SERVER=unix:/run/user/1000/pulse/native"
+Environment="VOICE_DEBUG=1"
 
 [Install]
 WantedBy=default.target
