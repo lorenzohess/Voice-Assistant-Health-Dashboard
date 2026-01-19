@@ -2,7 +2,7 @@
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
 
@@ -12,6 +12,9 @@ from apscheduler.triggers.cron import CronTrigger
 from . import CONFIG_FILE, PROJECT_DIR
 from .player import play_random_playlist, stop_playback
 from .display import display_on
+
+# Flask app for database access (lazy loaded)
+_flask_app = None
 
 # Config files
 DISPLAY_CONFIG_FILE = PROJECT_DIR / "data" / "display_config.json"
@@ -23,6 +26,7 @@ _scheduler: Optional[BackgroundScheduler] = None
 ALARM_JOB_ID = "morning_alarm"
 DISPLAY_WAKE_JOB_ID = "display_wake"
 CONFIG_CHECK_JOB_ID = "config_check"
+AUTOFILL_JOB_ID = "autofill_data"
 
 # Track config file modification times
 _last_config_mtime: float = 0
@@ -94,6 +98,88 @@ def _display_wake_trigger():
     """Called when display wake time is reached."""
     print(f"[Display] Wake triggered at {datetime.now().strftime('%H:%M')}")
     display_on()
+
+
+def _get_flask_app():
+    """Get or create Flask app for database access."""
+    global _flask_app
+    if _flask_app is None:
+        from app import create_app
+        _flask_app = create_app()
+    return _flask_app
+
+
+def _autofill_missing_data():
+    """
+    Auto-fill missing data for today with 0 values.
+    
+    Called at 23:59 daily. Fills in:
+    - Sleep: 0 hours
+    - Workouts: 0 minutes  
+    - Calories: 0 kcal
+    - Custom metrics: 0 each
+    
+    Excludes weight and wake time (0 doesn't make sense for these).
+    """
+    print(f"[Autofill] Checking for missing data at {datetime.now().strftime('%H:%M')}")
+    
+    try:
+        app = _get_flask_app()
+        
+        with app.app_context():
+            from app import db
+            from app.models import (
+                SleepEntry, WorkoutEntry, CalorieEntry,
+                CustomMetric, CustomMetricEntry
+            )
+            
+            today = date.today()
+            filled = []
+            
+            # Check sleep
+            if not SleepEntry.query.filter_by(date=today).first():
+                db.session.add(SleepEntry(date=today, hours=0))
+                filled.append("sleep")
+            
+            # Check workouts
+            if not WorkoutEntry.query.filter_by(date=today).first():
+                db.session.add(WorkoutEntry(
+                    date=today, 
+                    workout_type="None",
+                    duration_minutes=0
+                ))
+                filled.append("workouts")
+            
+            # Check calories
+            if not CalorieEntry.query.filter_by(date=today).first():
+                db.session.add(CalorieEntry(
+                    date=today,
+                    meal_name="No meals logged",
+                    calories=0
+                ))
+                filled.append("calories")
+            
+            # Check custom metrics
+            custom_metrics = CustomMetric.query.all()
+            for metric in custom_metrics:
+                if not CustomMetricEntry.query.filter_by(
+                    metric_id=metric.id, date=today
+                ).first():
+                    db.session.add(CustomMetricEntry(
+                        metric_id=metric.id,
+                        date=today,
+                        value=0
+                    ))
+                    filled.append(metric.name)
+            
+            if filled:
+                db.session.commit()
+                print(f"[Autofill] Filled missing data: {', '.join(filled)}")
+            else:
+                print("[Autofill] All data already logged for today")
+                
+    except Exception as e:
+        print(f"[Autofill] Error: {e}")
 
 
 def get_scheduler() -> BackgroundScheduler:
@@ -247,6 +333,15 @@ def start_scheduler():
         id=CONFIG_CHECK_JOB_ID,
         replace_existing=True
     )
+    
+    # Add autofill job at 23:59 daily
+    scheduler.add_job(
+        _autofill_missing_data,
+        CronTrigger(hour=23, minute=59),
+        id=AUTOFILL_JOB_ID,
+        replace_existing=True
+    )
+    print("[Autofill] Scheduled for 23:59 daily")
     
     scheduler.start()
     print("[Alarm] Scheduler started (config auto-reload enabled)")
