@@ -38,3 +38,7 @@ openwakeword==0.6.0
 piper-tts==1.2.0
 sounddevice==0.4.6
 numpy==1.26.4
+
+# Hardware controls (Raspberry Pi)
+gpiozero>=2.0
+adafruit-circuitpython-ads1x15>=2.2.0
