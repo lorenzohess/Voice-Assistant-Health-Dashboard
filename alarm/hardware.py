@@ -14,6 +14,7 @@ try:
     import busio
     import adafruit_ads1x15.ads1115 as ADS
     from adafruit_ads1x15.analog_in import AnalogIn
+    from adafruit_ads1x15 import P0  # Channel constants are in parent module
     HARDWARE_AVAILABLE = True
 except ImportError as e:
     print(f"[Hardware] Libraries not available: {e}")
@@ -68,7 +69,7 @@ class HardwareController:
             ads = ADS.ADS1115(i2c)
             # Set gain for 0-4.096V range (works well with 3.3V logic)
             ads.gain = 1
-            self._pot = AnalogIn(ads, ADS.P0)  # Channel A0
+            self._pot = AnalogIn(ads, P0)  # Channel A0
             print("[Hardware] ADS1115 ADC initialized on I2C (channel A0)")
             
         except Exception as e:
