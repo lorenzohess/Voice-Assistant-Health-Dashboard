@@ -1056,6 +1056,7 @@ def set_alarm_config():
         config_file.parent.mkdir(parents=True, exist_ok=True)
         with open(config_file, "w") as f:
             json.dump(existing, f, indent=2)
+            f.write("\n")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     

@@ -58,6 +58,7 @@ def save_config(config: dict) -> bool:
         
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=2)
+            f.write("\n")
         return True
     except IOError as e:
         print(f"[Alarm] Error saving config: {e}")
